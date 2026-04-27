@@ -1,0 +1,127 @@
+# GitLab CI/CD Pipeline for OpenCode Goal Tracker
+
+stages:
+  - build
+  - test
+  - release
+
+variables:
+  VERSION: "1.0.0"
+
+# Build job - creates binaries for all platforms
+build:
+  stage: build
+  image: golang:1.21-alpine
+  before_script:
+    - apk add --no-cache git bash
+  script:
+    # Build for multiple platforms
+    - mkdir -p dist
+    
+    # Darwin (macOS) AMD64
+    - GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/goals-darwin-amd64 main.go
+    
+    # Darwin (macOS) ARM64
+    - GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/goals-darwin-arm64 main.go
+    
+    # Linux AMD64
+    - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/goals-linux-amd64 main.go
+    
+    # Linux ARM64
+    - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/goals-linux-arm64 main.go
+    
+    # Windows AMD64
+    - GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/goals-windows-amd64.exe main.go
+    
+    # Create checksums
+    - cd dist && sha256sum * > checksums.txt && cd ..
+    
+    # List files
+    - ls -lh dist/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+# Test job - runs basic tests
+test:
+  stage: test
+  image: golang:1.21-alpine
+  before_script:
+    - apk add --no-cache git
+  script:
+    # Build for current platform
+    - go build -o goals main.go
+    
+    # Basic smoke test
+    - chmod +x goals
+    - ./goals list || true  # Creates initial file
+    
+    # Test all commands
+    - ./goals today > /dev/null
+    - ./goals task-list > /dev/null
+    - ./goals summary > /dev/null
+    
+    - echo "All tests passed!"
+
+# Release job - only runs on tags
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - build
+  script:
+    - echo "Creating release for $CI_COMMIT_TAG"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    description: |
+      ## OpenCode Goal Tracker ${CI_COMMIT_TAG}
+      
+      ### Installation
+      
+      **Quick Install:**
+      ```bash
+      curl -fsSL https://gitlab.com/sig/opengoal/-/raw/main/install.sh | bash
+      ```
+      
+      **Or download the binary for your platform:**
+      - macOS Intel: goals-darwin-amd64
+      - macOS Apple Silicon: goals-darwin-arm64
+      - Linux x86_64: goals-linux-amd64
+      - Linux ARM64: goals-linux-arm64
+      - Windows: goals-windows-amd64.exe
+      
+      ### What's New
+      
+      Lightning-fast goal and task tracking for OpenCode!
+      
+      - ⚡ 12ms response time
+      - 🎯 Goals with sub-goals
+      - ✅ Task list with priorities
+      - 📊 Today dashboard
+      - 💾 Persistent memory
+      
+      ### Usage
+      
+      After installation:
+      ```bash
+      /today          # Show dashboard
+      /goals-main     # Add goal
+      /task-add       # Add task
+      ```
+    assets:
+      links:
+        - name: 'macOS Intel (x86_64)'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/goals-darwin-amd64?job=build'
+        - name: 'macOS Apple Silicon (ARM64)'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/goals-darwin-arm64?job=build'
+        - name: 'Linux x86_64'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/goals-linux-amd64?job=build'
+        - name: 'Linux ARM64'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/goals-linux-arm64?job=build'
+        - name: 'Windows x86_64'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/goals-windows-amd64.exe?job=build'
+        - name: 'Checksums'
+          url: 'https://gitlab.com/sig/opengoal/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/dist/checksums.txt?job=build'

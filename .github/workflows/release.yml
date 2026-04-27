@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        
+    - name: Get version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+    - name: Build binaries
+      run: |
+        # Create dist directory
+        mkdir -p dist
+        
+        # Build for multiple platforms
+        PLATFORMS=(
+          "darwin/amd64"
+          "darwin/arm64"
+          "linux/amd64"
+          "linux/arm64"
+          "windows/amd64"
+        )
+        
+        for platform in "${PLATFORMS[@]}"; do
+          IFS='/' read -r -a array <<< "$platform"
+          GOOS="${array[0]}"
+          GOARCH="${array[1]}"
+          
+          OUTPUT_NAME="goals-${GOOS}-${GOARCH}"
+          
+          if [ "$GOOS" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+          fi
+          
+          echo "Building ${GOOS}/${GOARCH}..."
+          
+          GOOS=$GOOS GOARCH=$GOARCH go build \
+            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" \
+            -o "dist/$OUTPUT_NAME" \
+            main.go
+        done
+        
+        # Create checksums
+        cd dist
+        shasum -a 256 * > checksums.txt
+        cd ..
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/goals-*
+          dist/checksums.txt
+          install.sh
+        body: |
+          ## OpenCode Goal Tracker ${{ steps.version.outputs.VERSION }}
+          
+          ### Installation
+          
+          **Quick Install:**
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+          ```
+          
+          **Or download the binary for your platform below.**
+          
+          ### What's New
+          
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+          
+          ### Checksums
+          
+          SHA256 checksums are included in `checksums.txt`
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
