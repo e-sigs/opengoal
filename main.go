@@ -1230,6 +1230,17 @@ Lists:
   list-rename <id|name> <new-name>  Rename a list
   list-delete <id|name>             Delete a list and its contents
   list-show <id|name>               Show one list's full tree
+
+Inside OpenCode, prefer the slash commands:
+  /today                            Dashboard
+  /og   /ogl   /ogc <name>          Lists: browse, list, create
+  /ogs <name>   /ogd [name]         Lists: switch, delete
+  /goals-main   /goals-sub          Add main / sub-goals
+  /goals-list   /goals-done         List goals, mark complete
+  /goals-summary   /goals-remind    Daily summary, reminder
+  /task-add   /task-list            Tasks: add, list
+  /task-done   /task-delete         Tasks: complete, delete
+  /task-clear                       Remove all completed tasks
 `)
 }
 
