@@ -151,6 +151,7 @@ The data files are intentionally NOT renamed from `goals.*` — that's the on-di
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes
 - [`docs/SKILL.md`](docs/SKILL.md) — the OpenCode skill that ties it together
 - [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) — a longer walk-through
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system topology, agents, concurrency model
 - [`docs/internals.md`](docs/internals.md) — Go implementation notes
 
 ---
