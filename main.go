@@ -11,8 +11,15 @@ import (
 )
 
 // Data structures
+type List struct {
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Created time.Time `json:"created"`
+}
+
 type MainGoal struct {
 	ID          string    `json:"id"`
+	ListID      string    `json:"list_id"`
 	Title       string    `json:"title"`
 	Created     time.Time `json:"created"`
 	Status      string    `json:"status"`
@@ -24,6 +31,7 @@ type MainGoal struct {
 
 type SubGoal struct {
 	ID          string     `json:"id"`
+	ListID      string     `json:"list_id"`
 	Title       string     `json:"title"`
 	ParentID    string     `json:"parent_id"`
 	Created     time.Time  `json:"created"`
@@ -33,6 +41,7 @@ type SubGoal struct {
 
 type Task struct {
 	ID          string     `json:"id"`
+	ListID      string     `json:"list_id"`
 	Title       string     `json:"title"`
 	Created     time.Time  `json:"created"`
 	Completed   bool       `json:"completed"`
@@ -48,6 +57,8 @@ type DailySummary struct {
 }
 
 type GoalsData struct {
+	Lists          []List         `json:"lists"`
+	ActiveListID   string         `json:"active_list_id"`
 	MainGoals      []MainGoal     `json:"main_goals"`
 	SubGoals       []SubGoal      `json:"sub_goals"`
 	DailySummaries []DailySummary `json:"daily_summaries"`
@@ -76,6 +87,8 @@ func ensureGoalsFile() {
 	
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		data := GoalsData{
+			Lists:          []List{},
+			ActiveListID:   "",
 			MainGoals:      []MainGoal{},
 			SubGoals:       []SubGoal{},
 			DailySummaries: []DailySummary{},
@@ -83,6 +96,107 @@ func ensureGoalsFile() {
 		}
 		writeGoals(data)
 	}
+}
+
+// ensureActiveList syncs ActiveListID with the current Lists slice.
+// It does NOT auto-create lists. Returns true if data was mutated.
+func ensureActiveList(data *GoalsData) bool {
+	if len(data.Lists) == 0 {
+		if data.ActiveListID != "" {
+			data.ActiveListID = ""
+			return true
+		}
+		return false
+	}
+	// Verify ActiveListID still exists
+	for _, l := range data.Lists {
+		if l.ID == data.ActiveListID {
+			return false
+		}
+	}
+	// Active list missing or unset → fall back to first list
+	data.ActiveListID = data.Lists[0].ID
+	return true
+}
+
+// requireActiveList errors out if no list exists. Use before any goal/task mutation.
+func requireActiveList(data GoalsData) {
+	if len(data.Lists) == 0 || data.ActiveListID == "" {
+		fmt.Fprintf(os.Stderr, "\n❌ No lists exist yet.\n")
+		fmt.Fprintf(os.Stderr, "   Create one first:  goals list-create <name>\n\n")
+		os.Exit(1)
+	}
+}
+
+// findList returns index of list matching id or name (case-insensitive), or -1.
+func findList(data GoalsData, idOrName string) int {
+	for i, l := range data.Lists {
+		if l.ID == idOrName {
+			return i
+		}
+	}
+	for i, l := range data.Lists {
+		if strings.EqualFold(l.Name, idOrName) {
+			return i
+		}
+	}
+	return -1
+}
+
+func activeListID(data GoalsData) string {
+	return data.ActiveListID
+}
+
+func activeListName(data GoalsData) string {
+	for _, l := range data.Lists {
+		if l.ID == data.ActiveListID {
+			return l.Name
+		}
+	}
+	return "(none)"
+}
+
+// Filtered views by list_id. Pre-existing items lacking list_id are treated as belonging to the active list.
+func goalsForList(data GoalsData, listID string) []MainGoal {
+	out := []MainGoal{}
+	for _, mg := range data.MainGoals {
+		lid := mg.ListID
+		if lid == "" {
+			lid = data.ActiveListID
+		}
+		if lid == listID {
+			out = append(out, mg)
+		}
+	}
+	return out
+}
+
+func subGoalsForList(data GoalsData, listID string) []SubGoal {
+	out := []SubGoal{}
+	for _, sg := range data.SubGoals {
+		lid := sg.ListID
+		if lid == "" {
+			lid = data.ActiveListID
+		}
+		if lid == listID {
+			out = append(out, sg)
+		}
+	}
+	return out
+}
+
+func tasksForList(data GoalsData, listID string) []Task {
+	out := []Task{}
+	for _, t := range data.Tasks {
+		lid := t.ListID
+		if lid == "" {
+			lid = data.ActiveListID
+		}
+		if lid == listID {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func readGoals() GoalsData {
@@ -105,7 +219,13 @@ func readGoals() GoalsData {
 	if data.Tasks == nil {
 		data.Tasks = []Task{}
 	}
-	
+	if data.Lists == nil {
+		data.Lists = []List{}
+	}
+	if ensureActiveList(&data) {
+		writeGoals(data)
+	}
+
 	return data
 }
 
@@ -171,40 +291,48 @@ func printSeparator() {
 // Goal operations
 func listGoals() {
 	data := readGoals()
-	
-	fmt.Println("\n📋 Current Goals")
+	if len(data.Lists) == 0 {
+		fmt.Println("\n📋 Current Goals")
+		printSeparator()
+		fmt.Println("\n  No lists yet. Create one with:  goals list-create <name>\n")
+		return
+	}
+	listID := activeListID(data)
+	mainGoals := goalsForList(data, listID)
+
+	fmt.Printf("\n📋 Current Goals  [list: %s]\n", activeListName(data))
 	printSeparator()
-	
-	if len(data.MainGoals) == 0 {
+
+	if len(mainGoals) == 0 {
 		fmt.Println("\nNo goals yet! Use /goals-main to add your first goal.\n")
 		return
 	}
-	
-	for _, mg := range data.MainGoals {
+
+	for _, mg := range mainGoals {
 		progress := calculateProgress(mg.ID, data)
-		
+
 		statusIcon := "⏸️"
 		if mg.Status == "completed" {
 			statusIcon = "✅"
 		} else if mg.Status == "in_progress" {
 			statusIcon = "🔄"
 		}
-		
+
 		fmt.Printf("\n%s %s\n", statusIcon, mg.Title)
 		fmt.Printf("   ID: %s | Progress: %d%% | Status: %s\n", mg.ID, progress, mg.Status)
-		
+
 		if len(mg.Context) > 0 {
 			fmt.Printf("   Context: %s\n", strings.Join(mg.Context, ", "))
 		}
-		
-		// Print sub-goals
+
+		// Print sub-goals (in same list)
 		subGoals := []SubGoal{}
-		for _, sg := range data.SubGoals {
+		for _, sg := range subGoalsForList(data, listID) {
 			if sg.ParentID == mg.ID {
 				subGoals = append(subGoals, sg)
 			}
 		}
-		
+
 		if len(subGoals) > 0 {
 			fmt.Println("   Sub-goals:")
 			for _, sg := range subGoals {
@@ -216,7 +344,7 @@ func listGoals() {
 			}
 		}
 	}
-	
+
 	fmt.Println()
 	printSeparator()
 	fmt.Println()
@@ -224,9 +352,11 @@ func listGoals() {
 
 func addMainGoal(title string, context []string) {
 	data := readGoals()
-	
+	requireActiveList(data)
+
 	newGoal := MainGoal{
 		ID:       generateID("mg"),
+		ListID:   data.ActiveListID,
 		Title:    title,
 		Created:  time.Now(),
 		Status:   "in_progress",
@@ -234,17 +364,18 @@ func addMainGoal(title string, context []string) {
 		SubGoals: []string{},
 		Context:  context,
 	}
-	
+
 	data.MainGoals = append(data.MainGoals, newGoal)
 	writeGoals(data)
-	
-	fmt.Printf("\n✅ Added main goal: \"%s\"\n", title)
+
+	fmt.Printf("\n✅ Added main goal: \"%s\"  [list: %s]\n", title, activeListName(data))
 	fmt.Printf("   ID: %s\n\n", newGoal.ID)
 }
 
 func addSubGoal(title, parentID string) {
 	data := readGoals()
-	
+	requireActiveList(data)
+
 	// Find parent
 	parentIdx := -1
 	for i, mg := range data.MainGoals {
@@ -261,6 +392,7 @@ func addSubGoal(title, parentID string) {
 	
 	newSubGoal := SubGoal{
 		ID:       generateID("sg"),
+		ListID:   data.MainGoals[parentIdx].ListID,
 		Title:    title,
 		ParentID: parentID,
 		Created:  time.Now(),
@@ -333,36 +465,46 @@ func markDone(goalID string) {
 
 func generateSummary() {
 	data := readGoals()
+	if len(data.Lists) == 0 {
+		fmt.Println("\n📊 Daily Summary")
+		printSeparator()
+		fmt.Println("\n  No lists yet. Create one with:  goals list-create <name>\n")
+		return
+	}
+	listID := activeListID(data)
 	today := time.Now().Format("2006-01-02")
-	
+
+	listMains := goalsForList(data, listID)
+	listSubs := subGoalsForList(data, listID)
+
 	// Filter by today
 	completedToday := []SubGoal{}
-	for _, sg := range data.SubGoals {
+	for _, sg := range listSubs {
 		if sg.CompletedAt != nil && sg.CompletedAt.Format("2006-01-02") == today {
 			completedToday = append(completedToday, sg)
 		}
 	}
-	
+
 	addedToday := []string{}
-	for _, mg := range data.MainGoals {
+	for _, mg := range listMains {
 		if mg.Created.Format("2006-01-02") == today {
 			addedToday = append(addedToday, mg.Title)
 		}
 	}
-	for _, sg := range data.SubGoals {
+	for _, sg := range listSubs {
 		if sg.Created.Format("2006-01-02") == today {
 			addedToday = append(addedToday, sg.Title)
 		}
 	}
-	
+
 	inProgress := []MainGoal{}
-	for _, mg := range data.MainGoals {
+	for _, mg := range listMains {
 		if mg.Status == "in_progress" {
 			inProgress = append(inProgress, mg)
 		}
 	}
-	
-	fmt.Printf("\n📊 Daily Summary - %s\n", time.Now().Format("January 2, 2006"))
+
+	fmt.Printf("\n📊 Daily Summary - %s  [list: %s]\n", time.Now().Format("January 2, 2006"), activeListName(data))
 	printSeparator()
 	
 	fmt.Printf("\n✅ Completed (%d goals):\n", len(completedToday))
@@ -403,9 +545,9 @@ func generateSummary() {
 		for i := 0; i < limit; i++ {
 			mg := inProgress[i]
 			var nextSubGoal *SubGoal
-			for j := range data.SubGoals {
-				if data.SubGoals[j].ParentID == mg.ID && data.SubGoals[j].Status == "pending" {
-					nextSubGoal = &data.SubGoals[j]
+			for j := range listSubs {
+				if listSubs[j].ParentID == mg.ID && listSubs[j].Status == "pending" {
+					nextSubGoal = &listSubs[j]
 					break
 				}
 			}
@@ -427,45 +569,52 @@ func generateSummary() {
 
 func remindMe() {
 	data := readGoals()
-	
+	if len(data.Lists) == 0 {
+		fmt.Println("\n🎯 Goal Reminder")
+		printSeparator()
+		fmt.Println("\n  No lists yet. Create one with:  goals list-create <name>\n")
+		return
+	}
+	listID := activeListID(data)
+
 	inProgress := []MainGoal{}
-	for _, mg := range data.MainGoals {
+	for _, mg := range goalsForList(data, listID) {
 		if mg.Status == "in_progress" {
 			inProgress = append(inProgress, mg)
 		}
 	}
-	
+
 	pendingSubGoals := []SubGoal{}
-	for _, sg := range data.SubGoals {
+	for _, sg := range subGoalsForList(data, listID) {
 		if sg.Status == "pending" {
 			pendingSubGoals = append(pendingSubGoals, sg)
 		}
 	}
-	
-	fmt.Println("\n🎯 Goal Reminder")
+
+	fmt.Printf("\n🎯 Goal Reminder  [list: %s]\n", activeListName(data))
 	printSeparator()
-	
+
 	if len(inProgress) == 0 {
 		fmt.Println("\n📭 No active goals. Use /goals-main to add a goal!\n")
 		return
 	}
-	
+
 	fmt.Printf("\n📌 %d main goal(s) in progress\n", len(inProgress))
 	fmt.Printf("📌 %d sub-goal(s) pending\n\n", len(pendingSubGoals))
-	
+
 	// Show top priority
 	topGoal := inProgress[0]
 	progress := calculateProgress(topGoal.ID, data)
-	
+
 	fmt.Printf("🔥 Focus Now: %s (%d%%)\n", topGoal.Title, progress)
-	
-	for _, sg := range data.SubGoals {
+
+	for _, sg := range subGoalsForList(data, listID) {
 		if sg.ParentID == topGoal.ID && sg.Status == "pending" {
 			fmt.Printf("   Next Step: %s\n", sg.Title)
 			break
 		}
 	}
-	
+
 	fmt.Println()
 	printSeparator()
 	fmt.Println()
@@ -474,19 +623,26 @@ func remindMe() {
 // Task operations
 func listTasks() {
 	data := readGoals()
-	
+	if len(data.Lists) == 0 {
+		fmt.Println("\n📝 Task List")
+		printSeparator()
+		fmt.Println("\n  No lists yet. Create one with:  goals list-create <name>\n")
+		return
+	}
+	listID := activeListID(data)
+
 	pending := []Task{}
 	completed := []Task{}
-	
-	for _, t := range data.Tasks {
+
+	for _, t := range tasksForList(data, listID) {
 		if t.Completed {
 			completed = append(completed, t)
 		} else {
 			pending = append(pending, t)
 		}
 	}
-	
-	fmt.Println("\n📝 Task List")
+
+	fmt.Printf("\n📝 Task List  [list: %s]\n", activeListName(data))
 	printSeparator()
 	
 	if len(pending) == 0 && len(completed) == 0 {
@@ -531,9 +687,11 @@ func listTasks() {
 
 func addTask(title, priority string) {
 	data := readGoals()
-	
+	requireActiveList(data)
+
 	newTask := Task{
 		ID:       generateID("task"),
+		ListID:   data.ActiveListID,
 		Title:    title,
 		Created:  time.Now(),
 		Completed: false,
@@ -608,34 +766,53 @@ func clearCompletedTasks() {
 // Today dashboard
 func showToday() {
 	data := readGoals()
+
+	if len(data.Lists) == 0 {
+		fmt.Println("\n╔════════════════════════════════════════════════╗")
+		fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format("Monday, January 2, 2006"))
+		fmt.Println("║  📂 No lists yet")
+		fmt.Println("╚════════════════════════════════════════════════╝")
+		fmt.Println("\nYou have no goal lists yet.")
+		fmt.Println("Create your first one with:")
+		fmt.Println("  goals list-create <name>")
+		fmt.Println("\nOr use /ogl to manage lists interactively.\n")
+		return
+	}
+
+	listID := activeListID(data)
 	today := time.Now().Format("2006-01-02")
-	
+
+	listMains := goalsForList(data, listID)
+	listSubs := subGoalsForList(data, listID)
+	listTasksAll := tasksForList(data, listID)
+
 	fmt.Println("\n╔════════════════════════════════════════════════╗")
 	fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format("Monday, January 2, 2006"))
+	fmt.Printf("║  📂 List: %s\n", activeListName(data))
 	fmt.Println("╚════════════════════════════════════════════════╝")
-	
+
 	// Active Goals Section
 	inProgress := []MainGoal{}
-	for _, mg := range data.MainGoals {
+	for _, mg := range listMains {
 		if mg.Status == "in_progress" {
 			inProgress = append(inProgress, mg)
 		}
 	}
-	
+
 	fmt.Println("\n🎯 ACTIVE GOALS")
 	printSeparator()
-	
+
 	if len(inProgress) > 0 {
 		for _, mg := range inProgress {
 			progress := calculateProgress(mg.ID, data)
 			var nextSubGoal *SubGoal
-			for i := range data.SubGoals {
-				if data.SubGoals[i].ParentID == mg.ID && data.SubGoals[i].Status == "pending" {
-					nextSubGoal = &data.SubGoals[i]
+			for i := range listSubs {
+				if listSubs[i].ParentID == mg.ID && listSubs[i].Status == "pending" {
+					nextSubGoal = &listSubs[i]
 					break
 				}
 			}
-			
+
 			fmt.Printf("\n%s [%d%%]\n", mg.Title, progress)
 			if nextSubGoal != nil {
 				fmt.Printf("  → Next: %s\n", nextSubGoal.Title)
@@ -644,14 +821,14 @@ func showToday() {
 	} else {
 		fmt.Println("\n  No active goals. Use /goals-main to add one!")
 	}
-	
+
 	// Pending Tasks Section
 	pending := []Task{}
 	highPriority := []Task{}
 	mediumPriority := []Task{}
 	otherTasks := []Task{}
-	
-	for _, t := range data.Tasks {
+
+	for _, t := range listTasksAll {
 		if !t.Completed {
 			pending = append(pending, t)
 			switch t.Priority {
@@ -695,14 +872,14 @@ func showToday() {
 	
 	// Today's Progress Section
 	completedToday := []SubGoal{}
-	for _, sg := range data.SubGoals {
+	for _, sg := range listSubs {
 		if sg.CompletedAt != nil && sg.CompletedAt.Format("2006-01-02") == today {
 			completedToday = append(completedToday, sg)
 		}
 	}
-	
+
 	tasksCompletedToday := []Task{}
-	for _, t := range data.Tasks {
+	for _, t := range listTasksAll {
 		if t.CompletedAt != nil && t.CompletedAt.Format("2006-01-02") == today {
 			tasksCompletedToday = append(tasksCompletedToday, t)
 		}
@@ -744,7 +921,7 @@ func showToday() {
 	// Then suggest next sub-goal
 	if len(inProgress) > 0 {
 		topGoal := inProgress[0]
-		for _, sg := range data.SubGoals {
+		for _, sg := range listSubs {
 			if sg.ParentID == topGoal.ID && sg.Status == "pending" {
 				fmt.Printf("\n  %d. %s (%s)\n", focusCount+1, sg.Title, topGoal.Title)
 				focusCount++
@@ -780,6 +957,218 @@ func showToday() {
 	fmt.Println("\n" + strings.Repeat("═", 50) + "\n")
 }
 
+// List operations
+func listLists() {
+	data := readGoals()
+
+	fmt.Println("\n📂 Lists")
+	printSeparator()
+
+	if len(data.Lists) == 0 {
+		fmt.Println("\n  No lists yet.")
+		fmt.Println("  Create your first list:  goals list-create <name>\n")
+		return
+	}
+
+	for _, l := range data.Lists {
+		marker := "  "
+		if l.ID == data.ActiveListID {
+			marker = "▶ "
+		}
+		mainCount := len(goalsForList(data, l.ID))
+		subCount := len(subGoalsForList(data, l.ID))
+		taskCount := len(tasksForList(data, l.ID))
+		pendingTasks := 0
+		for _, t := range tasksForList(data, l.ID) {
+			if !t.Completed {
+				pendingTasks++
+			}
+		}
+		fmt.Printf("\n%s%s\n", marker, l.Name)
+		fmt.Printf("    ID: %s\n", l.ID)
+		fmt.Printf("    Goals: %d | Sub-goals: %d | Tasks: %d (%d pending)\n",
+			mainCount, subCount, taskCount, pendingTasks)
+	}
+
+	fmt.Println()
+	printSeparator()
+	fmt.Printf("\nActive: %s\n\n", activeListName(data))
+}
+
+func listCreate(name string) {
+	data := readGoals()
+
+	// Prevent dup names
+	for _, l := range data.Lists {
+		if strings.EqualFold(l.Name, name) {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: A list named \"%s\" already exists.\n\n", name)
+			os.Exit(1)
+		}
+	}
+
+	newList := List{
+		ID:      generateID("list"),
+		Name:    name,
+		Created: time.Now(),
+	}
+	data.Lists = append(data.Lists, newList)
+	data.ActiveListID = newList.ID
+	writeGoals(data)
+
+	fmt.Printf("\n✅ Created list: \"%s\" (now active)\n", name)
+	fmt.Printf("   ID: %s\n\n", newList.ID)
+}
+
+func listUse(idOrName string) {
+	data := readGoals()
+	idx := findList(data, idOrName)
+	if idx == -1 {
+		fmt.Fprintf(os.Stderr, "\n❌ Error: List \"%s\" not found.\n\n", idOrName)
+		os.Exit(1)
+	}
+	data.ActiveListID = data.Lists[idx].ID
+	writeGoals(data)
+	fmt.Printf("\n✅ Active list: %s\n\n", data.Lists[idx].Name)
+}
+
+func listRename(idOrName, newName string) {
+	data := readGoals()
+	idx := findList(data, idOrName)
+	if idx == -1 {
+		fmt.Fprintf(os.Stderr, "\n❌ Error: List \"%s\" not found.\n\n", idOrName)
+		os.Exit(1)
+	}
+	for i, l := range data.Lists {
+		if i != idx && strings.EqualFold(l.Name, newName) {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: A list named \"%s\" already exists.\n\n", newName)
+			os.Exit(1)
+		}
+	}
+	old := data.Lists[idx].Name
+	data.Lists[idx].Name = newName
+	writeGoals(data)
+	fmt.Printf("\n✅ Renamed list: \"%s\" → \"%s\"\n\n", old, newName)
+}
+
+func listDelete(idOrName string) {
+	data := readGoals()
+	idx := findList(data, idOrName)
+	if idx == -1 {
+		fmt.Fprintf(os.Stderr, "\n❌ Error: List \"%s\" not found.\n\n", idOrName)
+		os.Exit(1)
+	}
+	target := data.Lists[idx]
+
+	// Drop all goals/subs/tasks belonging to this list
+	newMains := []MainGoal{}
+	for _, mg := range data.MainGoals {
+		if mg.ListID != target.ID {
+			newMains = append(newMains, mg)
+		}
+	}
+	newSubs := []SubGoal{}
+	for _, sg := range data.SubGoals {
+		if sg.ListID != target.ID {
+			newSubs = append(newSubs, sg)
+		}
+	}
+	newTasks := []Task{}
+	for _, t := range data.Tasks {
+		if t.ListID != target.ID {
+			newTasks = append(newTasks, t)
+		}
+	}
+	data.MainGoals = newMains
+	data.SubGoals = newSubs
+	data.Tasks = newTasks
+	data.Lists = append(data.Lists[:idx], data.Lists[idx+1:]...)
+
+	if data.ActiveListID == target.ID {
+		if len(data.Lists) > 0 {
+			data.ActiveListID = data.Lists[0].ID
+		} else {
+			data.ActiveListID = ""
+		}
+	}
+
+	writeGoals(data)
+	fmt.Printf("\n🗑️  Deleted list: \"%s\" (and its goals/tasks)\n", target.Name)
+	if len(data.Lists) == 0 {
+		fmt.Printf("   No lists remaining. Create one with:  goals list-create <name>\n\n")
+	} else {
+		fmt.Printf("   Active list is now: %s\n\n", activeListName(data))
+	}
+}
+
+func listShow(idOrName string) {
+	data := readGoals()
+	idx := findList(data, idOrName)
+	if idx == -1 {
+		fmt.Fprintf(os.Stderr, "\n❌ Error: List \"%s\" not found.\n\n", idOrName)
+		os.Exit(1)
+	}
+	target := data.Lists[idx]
+
+	fmt.Printf("\n📂 List: %s", target.Name)
+	if target.ID == data.ActiveListID {
+		fmt.Printf("  (active)")
+	}
+	fmt.Println()
+	printSeparator()
+
+	mains := goalsForList(data, target.ID)
+	subs := subGoalsForList(data, target.ID)
+	tasks := tasksForList(data, target.ID)
+
+	// Goals
+	fmt.Println("\n🎯 Goals:")
+	if len(mains) == 0 {
+		fmt.Println("  (none)")
+	}
+	for _, mg := range mains {
+		progress := calculateProgress(mg.ID, data)
+		statusIcon := "⏸️"
+		if mg.Status == "completed" {
+			statusIcon = "✅"
+		} else if mg.Status == "in_progress" {
+			statusIcon = "🔄"
+		}
+		fmt.Printf("  %s %s [%d%%]\n", statusIcon, mg.Title, progress)
+		fmt.Printf("     ID: %s\n", mg.ID)
+		for _, sg := range subs {
+			if sg.ParentID == mg.ID {
+				icon := "○"
+				if sg.Status == "completed" {
+					icon = "✓"
+				}
+				fmt.Printf("       %s %s\n", icon, sg.Title)
+			}
+		}
+	}
+
+	// Tasks
+	fmt.Println("\n📝 Tasks:")
+	if len(tasks) == 0 {
+		fmt.Println("  (none)")
+	}
+	for _, t := range tasks {
+		icon := "○"
+		if t.Completed {
+			icon = "✓"
+		}
+		priority := ""
+		if t.Priority != "" {
+			priority = fmt.Sprintf(" [%s]", t.Priority)
+		}
+		fmt.Printf("  %s %s%s\n", icon, t.Title, priority)
+		fmt.Printf("     ID: %s\n", t.ID)
+	}
+
+	fmt.Println()
+	printSeparator()
+	fmt.Println()
+}
+
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "\n❌ Error: Unknown command\n")
 	fmt.Fprintf(os.Stderr, "\nAvailable commands:\n")
@@ -797,7 +1186,14 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "    task-delete <id>  - Delete a task\n")
 	fmt.Fprintf(os.Stderr, "    task-clear        - Clear all completed tasks\n")
 	fmt.Fprintf(os.Stderr, "  Dashboard:\n")
-	fmt.Fprintf(os.Stderr, "    today             - Show today's dashboard\n\n")
+	fmt.Fprintf(os.Stderr, "    today             - Show today's dashboard\n")
+	fmt.Fprintf(os.Stderr, "  Lists:\n")
+	fmt.Fprintf(os.Stderr, "    list-ls           - Show all lists\n")
+	fmt.Fprintf(os.Stderr, "    list-create <name> - Create a new list (and switch to it)\n")
+	fmt.Fprintf(os.Stderr, "    list-use <id|name> - Switch active list\n")
+	fmt.Fprintf(os.Stderr, "    list-rename <id|name> <new-name> - Rename a list\n")
+	fmt.Fprintf(os.Stderr, "    list-delete <id|name> - Delete a list and its contents\n")
+	fmt.Fprintf(os.Stderr, "    list-show <id|name> - Show one list's full tree\n\n")
 }
 
 func main() {
@@ -883,7 +1279,45 @@ func main() {
 		
 	case "today":
 		showToday()
-		
+
+	case "list-ls":
+		listLists()
+
+	case "list-create":
+		if len(args) == 0 {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: Please provide a list name.\n\n")
+			os.Exit(1)
+		}
+		listCreate(strings.Join(args, " "))
+
+	case "list-use":
+		if len(args) == 0 {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: Please provide a list id or name.\n\n")
+			os.Exit(1)
+		}
+		listUse(strings.Join(args, " "))
+
+	case "list-rename":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: Usage: goals list-rename <id|name> <new-name>\n\n")
+			os.Exit(1)
+		}
+		listRename(args[0], strings.Join(args[1:], " "))
+
+	case "list-delete":
+		if len(args) == 0 {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: Please provide a list id or name.\n\n")
+			os.Exit(1)
+		}
+		listDelete(strings.Join(args, " "))
+
+	case "list-show":
+		if len(args) == 0 {
+			fmt.Fprintf(os.Stderr, "\n❌ Error: Please provide a list id or name.\n\n")
+			os.Exit(1)
+		}
+		listShow(strings.Join(args, " "))
+
 	default:
 		printUsage()
 		os.Exit(1)

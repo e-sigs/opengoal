@@ -6,8 +6,8 @@
 set -e
 
 SCRIPT_NAME="OpenCode Goal Tracker"
-REPO_URL="https://gitlab.com/sig/opengoal"  # Update with your GitLab URL
-VERSION="1.0.0"
+REPO_URL="https://github.com/e-sigs/opengoal"
+VERSION="1.1.0"
 
 # Colors for output
 RED='\033[0;31m'
@@ -106,22 +106,38 @@ if [ -f "main.go" ]; then
     
 else
     echo -e "${BLUE}Downloading from GitHub...${NC}"
-    
-    # Download binary for platform
-    BINARY_URL="${REPO_URL}/releases/download/v${VERSION}/goals-${OS}-${ARCH}"
-    
-    if command -v curl &> /dev/null; then
-        curl -L -o "$HOME/.config/opencode/skills/goal-tracker/goals" "$BINARY_URL"
-    elif command -v wget &> /dev/null; then
-        wget -O "$HOME/.config/opencode/skills/goal-tracker/goals" "$BINARY_URL"
-    else
-        echo -e "${RED}Error: Neither curl nor wget is available.${NC}"
-        exit 1
+
+    BINARY_NAME="goals-${OS}-${ARCH}"
+    if [ "$OS" = "windows" ]; then
+        BINARY_NAME="${BINARY_NAME}.exe"
     fi
-    
-    # Download other files
-    echo "Downloading configuration files..."
-    # TODO: Download skill file, commands, etc.
+    BINARY_URL="${REPO_URL}/releases/download/v${VERSION}/${BINARY_NAME}"
+    RAW_BASE="https://raw.githubusercontent.com/e-sigs/opengoal/v${VERSION}"
+
+    fetch() {
+        local url="$1" dest="$2"
+        if command -v curl &> /dev/null; then
+            curl -fsSL -o "$dest" "$url"
+        elif command -v wget &> /dev/null; then
+            wget -qO "$dest" "$url"
+        else
+            echo -e "${RED}Error: Neither curl nor wget is available.${NC}"
+            exit 1
+        fi
+    }
+
+    echo "Downloading binary..."
+    fetch "$BINARY_URL" "$HOME/.config/opencode/skills/goal-tracker/goals"
+
+    echo "Downloading skill files..."
+    fetch "$RAW_BASE/SKILL.md" "$HOME/.config/opencode/skills/goal-tracker/SKILL.md"
+
+    echo "Downloading command files..."
+    for cmd in goals-done goals-list goals-main goals-remind goals-sub goals-summary \
+               task-add task-clear task-delete task-done task-list today \
+               og ogc ogd ogl ogs; do
+        fetch "$RAW_BASE/commands/${cmd}.md" "$HOME/.config/opencode/commands/${cmd}.md"
+    done
 fi
 
 # Make binary executable
@@ -131,7 +147,7 @@ echo -e "${GREEN}✓ Made binary executable${NC}"
 # Initialize goals.json if it doesn't exist
 if [ ! -f "$HOME/.local/share/opencode/goals.json" ]; then
     echo "Initializing goals database..."
-    "$HOME/.config/opencode/skills/goal-tracker/goals" list > /dev/null 2>&1 || true
+    "$HOME/.config/opencode/skills/goal-tracker/goals" today > /dev/null 2>&1 || true
     echo -e "${GREEN}✓ Initialized goals database${NC}"
 fi
 
@@ -161,6 +177,11 @@ echo "  ~/.config/opencode/skills/goal-tracker/GETTING_STARTED.md"
 echo ""
 echo -e "${BLUE}Available Commands:${NC}"
 echo "  /today           - Show dashboard"
+echo "  /og              - Interactive list browser"
+echo "  /ogl             - List all lists"
+echo "  /ogc <name>      - Create a list"
+echo "  /ogs <name>      - Switch active list"
+echo "  /ogd [name]      - Delete a list"
 echo "  /goals-main      - Add main goal"
 echo "  /goals-list      - List goals"
 echo "  /task-add        - Add task"
