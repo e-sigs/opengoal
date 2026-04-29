@@ -77,6 +77,18 @@ type Task struct {
 	Completed   bool       `json:"completed"`
 	Priority    string     `json:"priority,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+
+	// Multi-agent coordination (see claims.go).
+	// Assignee is the agent ID currently holding the claim, or "".
+	// ClaimedAt is when the claim was taken; combined with the TTL
+	// (claimTTL) it determines whether the claim is live or stale.
+	Assignee  string     `json:"assignee,omitempty"`
+	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
+
+	// DependsOn lists task IDs that must be completed before this task
+	// can be claimed. Stale or live claims on dependencies do not block
+	// — only the Completed flag matters. Empty/nil means no deps.
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 type GoalsData struct {
@@ -255,8 +267,8 @@ func migrateOrphanListIDs(data *GoalsData) bool {
 // requireActiveList errors out if no list exists. Use before any goal/task mutation.
 func requireActiveList(data GoalsData) {
 	if len(data.Lists) == 0 || data.ActiveListID == "" {
-		fmt.Fprintf(os.Stderr, "\n❌ No lists exist yet.\n")
-		fmt.Fprintf(os.Stderr, "   Create one first:  goals list-create <name>\n\n")
+		fmt.Fprintf(os.Stderr, "\n❌ No roadmaps exist yet.\n")
+		fmt.Fprintf(os.Stderr, "   Create one first:  og list-create <name>\n\n")
 		os.Exit(1)
 	}
 }
@@ -354,17 +366,17 @@ func listGoals() {
 	if len(data.Lists) == 0 {
 		fmt.Println("\n📋 Current Goals")
 		printSeparator()
-		fmt.Printf("\n  No lists yet. Create one with:  goals list-create <name>\n\n")
+		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
 	listID := data.ActiveListID
 	mainGoals := goalsForList(data, listID)
 
-	fmt.Printf("\n📋 Current Goals  [list: %s]\n", activeListName(data))
+	fmt.Printf("\n📋 Current Goals  [roadmap: %s]\n", activeListName(data))
 	printSeparator()
 
 	if len(mainGoals) == 0 {
-		fmt.Printf("\nNo goals yet! Use /goals-main to add your first goal.\n\n")
+		fmt.Printf("\nNo goals yet! Use /og-main to add your first goal.\n\n")
 		return
 	}
 
@@ -429,7 +441,7 @@ func addMainGoal(title string, context []string) {
 	data.MainGoals = append(data.MainGoals, newGoal)
 	writeGoals(data)
 
-	fmt.Printf("\n✅ Added main goal: %q  [list: %s]\n", title, activeListName(data))
+	fmt.Printf("\n✅ Added main goal: %q  [roadmap: %s]\n", title, activeListName(data))
 	fmt.Printf("   ID: %s\n\n", newGoal.ID)
 }
 
@@ -524,7 +536,7 @@ func generateSummary() {
 	if len(data.Lists) == 0 {
 		fmt.Println("\n📊 Daily Summary")
 		printSeparator()
-		fmt.Printf("\n  No lists yet. Create one with:  goals list-create <name>\n\n")
+		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
 	listID := data.ActiveListID
@@ -559,7 +571,7 @@ func generateSummary() {
 		}
 	}
 
-	fmt.Printf("\n📊 Daily Summary - %s  [list: %s]\n",
+	fmt.Printf("\n📊 Daily Summary - %s  [roadmap: %s]\n",
 		time.Now().Format(dateFmtSummary), activeListName(data))
 	printSeparator()
 
@@ -625,7 +637,7 @@ func remindMe() {
 	if len(data.Lists) == 0 {
 		fmt.Println("\n🎯 Goal Reminder")
 		printSeparator()
-		fmt.Printf("\n  No lists yet. Create one with:  goals list-create <name>\n\n")
+		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
 	listID := data.ActiveListID
@@ -645,11 +657,11 @@ func remindMe() {
 		}
 	}
 
-	fmt.Printf("\n🎯 Goal Reminder  [list: %s]\n", activeListName(data))
+	fmt.Printf("\n🎯 Goal Reminder  [roadmap: %s]\n", activeListName(data))
 	printSeparator()
 
 	if len(inProgress) == 0 {
-		fmt.Printf("\n📭 No active goals. Use /goals-main to add a goal!\n\n")
+		fmt.Printf("\n📭 No active goals. Use /og-main to add a goal!\n\n")
 		return
 	}
 
@@ -680,7 +692,7 @@ func listTasks() {
 	if len(data.Lists) == 0 {
 		fmt.Println("\n📝 Task List")
 		printSeparator()
-		fmt.Printf("\n  No lists yet. Create one with:  goals list-create <name>\n\n")
+		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
 	listID := data.ActiveListID
@@ -694,7 +706,7 @@ func listTasks() {
 		}
 	}
 
-	fmt.Printf("\n📝 Task List  [list: %s]\n", activeListName(data))
+	fmt.Printf("\n📝 Task List  [roadmap: %s]\n", activeListName(data))
 	printSeparator()
 
 	if len(pending) == 0 && len(completed) == 0 {
@@ -703,13 +715,29 @@ func listTasks() {
 	}
 
 	if len(pending) > 0 {
+		ttl := claimTTL()
 		fmt.Printf("\n⏳ Pending (%d):\n", len(pending))
 		for i, task := range pending {
 			priority := ""
 			if task.Priority != "" {
 				priority = fmt.Sprintf(" [%s]", task.Priority)
 			}
-			fmt.Printf("  %d. ○ %s%s\n", i+1, task.Title, priority)
+
+			// Status marker: blocked > claimed > stale > ready.
+			marker := "○"
+			suffix := ""
+			if blocked := blockedDeps(task, data.Tasks); len(blocked) > 0 {
+				marker = "⏸"
+				suffix = fmt.Sprintf(" — blocked by %d dep%s", len(blocked), plural(len(blocked)))
+			} else if claimActive(task, ttl) {
+				marker = "🔒"
+				suffix = fmt.Sprintf(" — %s (%s ago)", task.Assignee, formatAge(time.Since(*task.ClaimedAt)))
+			} else if task.Assignee != "" && task.ClaimedAt != nil {
+				marker = "⚠"
+				suffix = fmt.Sprintf(" — stale claim by %s", task.Assignee)
+			}
+
+			fmt.Printf("  %d. %s %s%s%s\n", i+1, marker, task.Title, priority, suffix)
 			fmt.Printf("     ID: %s | Created: %s\n", task.ID, task.Created.Format(dateFmtDisplay))
 		}
 	}
@@ -737,73 +765,145 @@ func listTasks() {
 	fmt.Println()
 }
 
-func addTask(title, priority string) {
-	data := readGoals()
-	requireActiveList(data)
+func addTask(title, priority string, dependsOn []string) {
+	withLock(func() {
+		data := readGoals()
+		requireActiveList(data)
 
-	newTask := Task{
-		ID:       generateID("task"),
-		ListID:   data.ActiveListID,
-		Title:    title,
-		Created:  time.Now(),
-		Priority: priority,
-	}
+		// Validate deps exist and aren't self-references.
+		for _, depID := range dependsOn {
+			if findTaskByID(data.Tasks, depID) == nil {
+				die("Error: dependency %q not found.", depID)
+			}
+		}
 
-	data.Tasks = append(data.Tasks, newTask)
-	writeGoals(data)
+		newTask := Task{
+			ID:        generateID("task"),
+			ListID:    data.ActiveListID,
+			Title:     title,
+			Created:   time.Now(),
+			Priority:  priority,
+			DependsOn: dependsOn,
+		}
 
-	fmt.Printf("\n✅ Added task: %q\n", title)
-	if priority != "" {
-		fmt.Printf("   Priority: %s\n", priority)
-	}
-	fmt.Printf("   ID: %s\n\n", newTask.ID)
+		data.Tasks = append(data.Tasks, newTask)
+		writeGoals(data)
+		appendEvent(Event{
+			Event: EvTaskAdded,
+			TaskID: newTask.ID, ListID: newTask.ListID, Title: newTask.Title,
+			Data: map[string]any{
+				"priority":   priority,
+				"depends_on": dependsOn,
+			},
+		})
+
+		fmt.Printf("\n✅ Added task: %q\n", title)
+		if priority != "" {
+			fmt.Printf("   Priority: %s\n", priority)
+		}
+		if len(dependsOn) > 0 {
+			fmt.Printf("   Depends on: %s\n", strings.Join(dependsOn, ", "))
+		}
+		fmt.Printf("   ID: %s\n\n", newTask.ID)
+	})
 }
 
 func markTaskDone(taskID string) {
-	data := readGoals()
-	now := time.Now()
+	withLock(func() {
+		data := readGoals()
+		now := time.Now()
 
-	for i := range data.Tasks {
-		if data.Tasks[i].ID == taskID {
-			data.Tasks[i].Completed = true
-			data.Tasks[i].CompletedAt = &now
-			writeGoals(data)
-			fmt.Printf("\n✅ Marked task as completed: %q\n\n", data.Tasks[i].Title)
-			return
+		for i := range data.Tasks {
+			if data.Tasks[i].ID == taskID {
+				data.Tasks[i].Completed = true
+				data.Tasks[i].CompletedAt = &now
+				// Completion releases any claim — the work is done.
+				prevAssignee := data.Tasks[i].Assignee
+				data.Tasks[i].Assignee = ""
+				data.Tasks[i].ClaimedAt = nil
+				completedTitle := data.Tasks[i].Title
+				completedListID := data.Tasks[i].ListID
+				writeGoals(data)
+				appendEvent(Event{
+					Event:  EvTaskCompleted,
+					TaskID: taskID, ListID: completedListID,
+					Title: completedTitle,
+					Data:  map[string]any{"prev_assignee": prevAssignee},
+				})
+				// Detect newly-unblocked tasks: any pending task that
+				// depended on this one and now has all deps satisfied.
+				for _, t := range data.Tasks {
+					if t.Completed || t.ID == taskID {
+						continue
+					}
+					depended := false
+					for _, d := range t.DependsOn {
+						if d == taskID {
+							depended = true
+							break
+						}
+					}
+					if !depended {
+						continue
+					}
+					if len(blockedDeps(t, data.Tasks)) == 0 {
+						appendEvent(Event{
+							Event:  EvTaskUnblocked,
+							TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+							Data: map[string]any{"unblocked_by": taskID},
+						})
+					}
+				}
+				fmt.Printf("\n✅ Marked task as completed: %q\n\n", completedTitle)
+				return
+			}
 		}
-	}
-	die("Error: Task with ID %q not found.", taskID)
+		die("Error: Task with ID %q not found.", taskID)
+	})
 }
 
 func deleteTask(taskID string) {
-	data := readGoals()
-	for i := range data.Tasks {
-		if data.Tasks[i].ID == taskID {
-			title := data.Tasks[i].Title
-			data.Tasks = append(data.Tasks[:i], data.Tasks[i+1:]...)
-			writeGoals(data)
-			fmt.Printf("\n🗑️  Deleted task: %q\n\n", title)
-			return
+	withLock(func() {
+		data := readGoals()
+		for i := range data.Tasks {
+			if data.Tasks[i].ID == taskID {
+				title := data.Tasks[i].Title
+				listID := data.Tasks[i].ListID
+				data.Tasks = append(data.Tasks[:i], data.Tasks[i+1:]...)
+				writeGoals(data)
+				appendEvent(Event{
+					Event:  EvTaskDeleted,
+					TaskID: taskID, ListID: listID, Title: title,
+				})
+				fmt.Printf("\n🗑️  Deleted task: %q\n\n", title)
+				return
+			}
 		}
-	}
-	die("Error: Task with ID %q not found.", taskID)
+		die("Error: Task with ID %q not found.", taskID)
+	})
 }
 
 func clearCompletedTasks() {
-	data := readGoals()
-	completedCount := 0
-	kept := data.Tasks[:0]
-	for _, t := range data.Tasks {
-		if t.Completed {
-			completedCount++
-			continue
+	withLock(func() {
+		data := readGoals()
+		completedCount := 0
+		kept := data.Tasks[:0]
+		for _, t := range data.Tasks {
+			if t.Completed {
+				completedCount++
+				continue
+			}
+			kept = append(kept, t)
 		}
-		kept = append(kept, t)
-	}
-	// Make a copy so the underlying array is freed for GC.
-	data.Tasks = append([]Task{}, kept...)
-	writeGoals(data)
-	fmt.Printf("\n🗑️  Cleared %d completed task(s)\n\n", completedCount)
+		// Make a copy so the underlying array is freed for GC.
+		data.Tasks = append([]Task{}, kept...)
+		writeGoals(data)
+		appendEvent(Event{
+			Event: EvTaskCleared,
+			Data:  map[string]any{"count": completedCount},
+		})
+		fmt.Printf("\n🗑️  Cleared %d completed task(s)\n\n", completedCount)
+	})
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -816,12 +916,12 @@ func showToday() {
 	if len(data.Lists) == 0 {
 		fmt.Println("\n╔════════════════════════════════════════════════╗")
 		fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format(dateFmtHeader))
-		fmt.Println("║  📂 No lists yet")
+		fmt.Println("║  📍 No roadmaps yet")
 		fmt.Println("╚════════════════════════════════════════════════╝")
-		fmt.Println("\nYou have no goal lists yet.")
+		fmt.Println("\nYou have no roadmaps yet.")
 		fmt.Println("Create your first one with:")
-		fmt.Println("  goals list-create <name>")
-		fmt.Printf("\nOr use /og to manage lists interactively.\n\n")
+		fmt.Println("  og list-create <name>")
+		fmt.Printf("\nOr use /og to manage roadmaps interactively.\n\n")
 		return
 	}
 
@@ -834,7 +934,7 @@ func showToday() {
 
 	fmt.Println("\n╔════════════════════════════════════════════════╗")
 	fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format(dateFmtHeader))
-	fmt.Printf("║  📂 List: %s\n", activeListName(data))
+	fmt.Printf("║  📍 Roadmap: %s\n", activeListName(data))
 	fmt.Println("╚════════════════════════════════════════════════╝")
 
 	// Active Goals
@@ -864,7 +964,7 @@ func showToday() {
 			}
 		}
 	} else {
-		fmt.Println("\n  No active goals. Use /goals-main to add one!")
+		fmt.Println("\n  No active goals. Use /og-main to add one!")
 	}
 
 	// Pending Tasks (bucketed by priority)
@@ -958,7 +1058,7 @@ func showToday() {
 	}
 	if focusCount == 0 {
 		fmt.Println("\n  Add some goals or tasks to get started!")
-		fmt.Println("  • /goals-main <title> - Add a main goal")
+		fmt.Println("  • /og-main <title> - Add a main goal")
 		fmt.Println("  • /task-add <title> - Add a quick task")
 	}
 
@@ -989,12 +1089,12 @@ func printPriorityBucket(label string, tasks []Task) {
 func listLists() {
 	data := readGoals()
 
-	fmt.Println("\n📂 Lists")
+	fmt.Println("\n📍 Roadmaps")
 	printSeparator()
 
 	if len(data.Lists) == 0 {
-		fmt.Println("\n  No lists yet.")
-		fmt.Printf("  Create your first list:  goals list-create <name>\n\n")
+		fmt.Println("\n  No roadmaps yet.")
+		fmt.Printf("  Create your first roadmap:  og list-create <name>\n\n")
 		return
 	}
 
@@ -1029,7 +1129,7 @@ func listCreate(name string) {
 
 	for _, l := range data.Lists {
 		if strings.EqualFold(l.Name, name) {
-			die("Error: A list named %q already exists.", name)
+			die("Error: A roadmap named %q already exists.", name)
 		}
 	}
 
@@ -1042,7 +1142,7 @@ func listCreate(name string) {
 	data.ActiveListID = newList.ID
 	writeGoals(data)
 
-	fmt.Printf("\n✅ Created list: %q (now active)\n", name)
+	fmt.Printf("\n✅ Created roadmap: %q (now active)\n", name)
 	fmt.Printf("   ID: %s\n\n", newList.ID)
 }
 
@@ -1050,35 +1150,36 @@ func listUse(idOrName string) {
 	data := readGoals()
 	idx := findList(data, idOrName)
 	if idx == -1 {
-		die("Error: List %q not found.", idOrName)
+		die("Error: Roadmap %q not found.", idOrName)
 	}
+
 	data.ActiveListID = data.Lists[idx].ID
 	writeGoals(data)
-	fmt.Printf("\n✅ Active list: %s\n\n", data.Lists[idx].Name)
+	fmt.Printf("\n✅ Active roadmap: %s\n\n", data.Lists[idx].Name)
 }
 
 func listRename(idOrName, newName string) {
 	data := readGoals()
 	idx := findList(data, idOrName)
 	if idx == -1 {
-		die("Error: List %q not found.", idOrName)
+		die("Error: Roadmap %q not found.", idOrName)
 	}
 	for i, l := range data.Lists {
 		if i != idx && strings.EqualFold(l.Name, newName) {
-			die("Error: A list named %q already exists.", newName)
+			die("Error: A roadmap named %q already exists.", newName)
 		}
 	}
 	old := data.Lists[idx].Name
 	data.Lists[idx].Name = newName
 	writeGoals(data)
-	fmt.Printf("\n✅ Renamed list: %q → %q\n\n", old, newName)
+	fmt.Printf("\n✅ Renamed roadmap: %q → %q\n\n", old, newName)
 }
 
 func listDelete(idOrName string) {
 	data := readGoals()
 	idx := findList(data, idOrName)
 	if idx == -1 {
-		die("Error: List %q not found.", idOrName)
+		die("Error: Roadmap %q not found.", idOrName)
 	}
 	target := data.Lists[idx]
 
@@ -1119,11 +1220,11 @@ func listDelete(idOrName string) {
 	}
 
 	writeGoals(data)
-	fmt.Printf("\n🗑️  Deleted list: %q (and its goals/tasks)\n", target.Name)
+	fmt.Printf("\n🗑️  Deleted roadmap: %q (and its goals/tasks)\n", target.Name)
 	if len(data.Lists) == 0 {
-		fmt.Printf("   No lists remaining. Create one with:  goals list-create <name>\n\n")
+		fmt.Printf("   No roadmaps remaining. Create one with:  og list-create <name>\n\n")
 	} else {
-		fmt.Printf("   Active list is now: %s\n\n", activeListName(data))
+		fmt.Printf("   Active roadmap is now: %s\n\n", activeListName(data))
 	}
 }
 
@@ -1131,11 +1232,11 @@ func listShow(idOrName string) {
 	data := readGoals()
 	idx := findList(data, idOrName)
 	if idx == -1 {
-		die("Error: List %q not found.", idOrName)
+		die("Error: Roadmap %q not found.", idOrName)
 	}
 	target := data.Lists[idx]
 
-	fmt.Printf("\n📂 List: %s", target.Name)
+	fmt.Printf("\n📍 Roadmap: %s", target.Name)
 	if target.ID == data.ActiveListID {
 		fmt.Print("  (active)")
 	}
@@ -1203,10 +1304,10 @@ func printUsage(toStderr bool) {
 		w = os.Stderr
 	}
 	fmt.Fprint(w, `
-Usage: goals <command> [args]
+Usage: og <command> [args]
 
 Goals:
-  list                              List goals in active list
+  list                              List goals in active roadmap
   add-main <title>                  Add a main goal
   add-sub <parent-id> <title>       Add a sub-goal under <parent-id>
   done <id>                         Mark goal as complete
@@ -1214,30 +1315,47 @@ Goals:
   remind                            Show reminder
 
 Tasks:
-  task-list                         List tasks in active list
-  task-add <title> [priority]       Add a task (priority: high|medium|low)
+  task-list                         List tasks in active roadmap
+  task-add <title> [priority] [--depends id1,id2]
+                                    Add a task (priority: high|medium|low)
+  task-show <id>                    Show one task with deps + claim status
   task-done <id>                    Mark task as complete
   task-delete <id>                  Delete a task
   task-clear                        Remove all completed tasks
 
+Multi-agent coordination:
+  task-next [--claim]               Show next actionable task; --claim takes it
+                                    (skips completed, claimed, and blocked tasks)
+  task-claim <id>                   Claim a task for the current agent
+                                    (refused if deps unfinished or claim live)
+  task-release <id>                 Release a claim you hold (or a stale one)
+
+  Set $OPENGOAL_AGENT to identify the agent (default: hostname-pid).
+  Stale claims auto-expire after $OPENGOAL_CLAIM_TTL seconds (default 1800).
+
+Event log:
+  events [--follow] [--since 5m|RFC3339] [--filter substr]
+                                    Stream the append-only event log.
+                                    Recorded at ~/.local/share/opencode/goals.events.jsonl
+
 Dashboard:
   today                             Show today's dashboard
 
-Lists:
-  list-ls                           Show all lists
-  list-create <name>                Create a list and switch to it
-  list-use <id|name>                Switch active list
-  list-rename <id|name> <new-name>  Rename a list
-  list-delete <id|name>             Delete a list and its contents
-  list-show <id|name>               Show one list's full tree
+Roadmaps:
+  list-ls                           Show all roadmaps
+  list-create <name>                Create a roadmap and switch to it
+  list-use <id|name>                Switch active roadmap
+  list-rename <id|name> <new-name>  Rename a roadmap
+  list-delete <id|name>             Delete a roadmap and its contents
+  list-show <id|name>               Show one roadmap's full tree
 
 Inside OpenCode, prefer the slash commands:
   /today                            Dashboard
-  /og   /ogl   /ogc <name>          Lists: browse, list, create
-  /ogs <name>   /ogd [name]         Lists: switch, delete
-  /goals-main   /goals-sub          Add main / sub-goals
-  /goals-list   /goals-done         List goals, mark complete
-  /goals-summary   /goals-remind    Daily summary, reminder
+  /og   /ogl   /ogc <name>          Roadmaps: browse, list, create
+  /ogs <name>   /ogd [name]         Roadmaps: switch, delete
+  /og-main   /og-sub          Add main / sub-goals
+  /og-list   /og-done         List goals, mark complete
+  /og-summary   /og-remind    Daily summary, reminder
   /task-add   /task-list            Tasks: add, list
   /task-done   /task-delete         Tasks: complete, delete
   /task-clear                       Remove all completed tasks
@@ -1270,7 +1388,7 @@ func main() {
 
 	case "add-sub":
 		if len(args) < 2 {
-			die("Error: Usage: goals add-sub <parent-id> <title>")
+			die("Error: Usage: og add-sub <parent-id> <title>")
 		}
 		addSubGoal(strings.Join(args[1:], " "), args[0])
 
@@ -1289,19 +1407,41 @@ func main() {
 
 	case "task-add":
 		requireArg(args, "a task title")
+		// Parse --depends <id,id,...> anywhere in args; remove from args.
+		var deps []string
+		var rest []string
+		for i := 0; i < len(args); i++ {
+			if args[i] == "--depends" || args[i] == "-d" {
+				if i+1 >= len(args) {
+					die("Error: --depends requires a comma-separated list of task IDs.")
+				}
+				for _, id := range strings.Split(args[i+1], ",") {
+					id = strings.TrimSpace(id)
+					if id != "" {
+						deps = append(deps, id)
+					}
+				}
+				i++ // skip the value
+				continue
+			}
+			rest = append(rest, args[i])
+		}
+		if len(rest) == 0 {
+			die("Error: Please provide a task title.")
+		}
 		// Optional last arg is a priority.
 		priorities := map[string]bool{
 			PriorityHigh: true, PriorityMedium: true, PriorityLow: true,
 		}
-		lastArg := strings.ToLower(args[len(args)-1])
+		lastArg := strings.ToLower(rest[len(rest)-1])
 		var title, priority string
-		if priorities[lastArg] && len(args) > 1 {
+		if priorities[lastArg] && len(rest) > 1 {
 			priority = lastArg
-			title = strings.Join(args[:len(args)-1], " ")
+			title = strings.Join(rest[:len(rest)-1], " ")
 		} else {
-			title = strings.Join(args, " ")
+			title = strings.Join(rest, " ")
 		}
-		addTask(title, priority)
+		addTask(title, priority, deps)
 
 	case "task-done":
 		requireArg(args, "a task ID")
@@ -1313,6 +1453,60 @@ func main() {
 
 	case "task-clear":
 		clearCompletedTasks()
+
+	case "task-claim":
+		requireArg(args, "a task ID")
+		claimTask(args[0])
+
+	case "task-release":
+		requireArg(args, "a task ID")
+		releaseTask(args[0])
+
+	case "task-next":
+		autoClaim := false
+		for _, a := range args {
+			if a == "--claim" || a == "-c" {
+				autoClaim = true
+			}
+		}
+		nextTask(autoClaim)
+
+	case "task-show":
+		requireArg(args, "a task ID")
+		showTask(args[0])
+
+	case "events":
+		follow := false
+		var since time.Time
+		filter := ""
+		for i := 0; i < len(args); i++ {
+			switch args[i] {
+			case "--follow", "-f":
+				follow = true
+			case "--since":
+				if i+1 >= len(args) {
+					die("Error: --since requires a timestamp (RFC3339 or duration like 5m, 1h).")
+				}
+				v := args[i+1]
+				if d, derr := time.ParseDuration(v); derr == nil {
+					since = time.Now().Add(-d)
+				} else if ts, terr := time.Parse(time.RFC3339, v); terr == nil {
+					since = ts
+				} else {
+					die("Error: --since must be RFC3339 timestamp or duration (e.g. 5m, 1h). Got %q.", v)
+				}
+				i++
+			case "--filter":
+				if i+1 >= len(args) {
+					die("Error: --filter requires a substring.")
+				}
+				filter = args[i+1]
+				i++
+			default:
+				die("Error: unknown flag for events: %s", args[i])
+			}
+		}
+		showEvents(follow, since, filter)
 
 	case "today":
 		showToday()
@@ -1330,7 +1524,7 @@ func main() {
 
 	case "list-rename":
 		if len(args) < 2 {
-			die("Error: Usage: goals list-rename <id|name> <new-name>")
+			die("Error: Usage: og list-rename <id|name> <new-name>")
 		}
 		listRename(args[0], strings.Join(args[1:], " "))
 

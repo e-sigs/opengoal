@@ -4,7 +4,7 @@ agent: general
 subtask: false
 ---
 
-!`~/.config/opencode/skills/goal-tracker/goals task-list`
+!`og task-list`
 
 Commands available:
 - /task-add <title> [priority] - Add new task (priority: high/medium/low)

@@ -1,28 +1,16 @@
-# Binaries
-goals
-dist/
-*.exe
-
-# Go
-*.so
-*.dylib
+# Build artifacts
+/og
+/cmd/og/og
 *.test
 *.out
-go.work
 
-# IDE
+# Editor / OS
+.DS_Store
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Backup files
-*.backup
-
-# Local test data
+# Local data files (should never be in repo)
 goals.json
+goals.json.lock
+goals.events.jsonl

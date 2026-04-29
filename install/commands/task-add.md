@@ -6,6 +6,6 @@ subtask: false
 
 Add task: $ARGUMENTS
 
-!`~/.config/opencode/skills/goal-tracker/goals task-add $ARGUMENTS`
+!`og task-add $ARGUMENTS`
 
 Task added successfully!

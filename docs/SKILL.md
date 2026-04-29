@@ -1,6 +1,6 @@
 ---
 name: goal-tracker
-description: Track daily main goals, sub-goals and tasks across multiple named lists with persistent memory and progress tracking
+description: Track daily main goals, sub-goals and tasks across multiple named roadmaps with persistent memory and progress tracking
 license: MIT
 compatibility: opencode
 metadata:
@@ -12,7 +12,7 @@ metadata:
 
 I am your personal goal tracking assistant with persistent memory. I help you:
 
-- **Organize work into named lists** (e.g. work, personal, side-project) and switch between them
+- **Organize work into named roadmaps** (e.g. work, personal, side-project) and switch between them
 - **Track main goals and sub-goals** across multiple days until completion
 - **Manage tasks** with optional priorities (high / medium / low)
 - **Calculate progress** automatically based on completed sub-goals
@@ -35,8 +35,8 @@ Goals remain active until you explicitly mark them complete. Writes are atomic (
 
 I maintain four collections in a single JSON file:
 
-1. **Lists** — top-level containers. Each list has a unique id and a human-readable name. Exactly one list is "active" at a time; all goal/task commands operate on the active list.
-2. **Main Goals** — high-level objectives that belong to a list. Auto-calculated progress based on sub-goals. Status: `pending`, `in_progress`, `completed`.
+1. **Roadmaps** — top-level containers. Each roadmap has a unique id and a human-readable name. Exactly one roadmap is "active" at a time; all goal/task commands operate on the active roadmap.
+2. **Main Goals** — high-level objectives that belong to a roadmap. Auto-calculated progress based on sub-goals. Status: `pending`, `in_progress`, `completed`.
 3. **Sub-Goals** — actionable steps under a main goal. Completing all sub-goals auto-completes the parent.
 4. **Tasks** — quick standalone todos with optional priority (`high` / `medium` / `low`).
 
@@ -50,46 +50,46 @@ When all sub-goals are complete, the main goal is auto-completed.
 
 ## Commands Available
 
-### Lists
-- `/og` — interactive list browser (pick / view / switch / rename / delete)
-- `/ogl` — show all lists
-- `/ogc <name>` — create a new list and switch to it
-- `/ogs <name>` — switch the active list
-- `/ogd [name]` — delete a list (with confirmation; prompts to pick if no name)
+### Roadmaps
+- `/og` — interactive roadmap browser (pick / view / switch / rename / delete)
+- `/ogl` — show all roadmaps
+- `/ogc <name>` — create a new roadmap and switch to it
+- `/ogs <name>` — switch the active roadmap
+- `/ogd [name]` — delete a roadmap (with confirmation; prompts to pick if no name)
 
 ### Goals
-- `/goals-main <title>` — add a main goal in the active list
-- `/goals-sub <parent-id> <title>` — add a sub-goal under a main goal
-- `/goals-list` — show goals in the active list
-- `/goals-done <id>` — mark a goal (main or sub) as complete
-- `/goals-summary` — daily summary for the active list
-- `/goals-remind` — show focus reminder for the active list
+- `/og-main <title>` — add a main goal in the active roadmap
+- `/og-sub <parent-id> <title>` — add a sub-goal under a main goal
+- `/og-list` — show goals in the active roadmap
+- `/og-done <id>` — mark a goal (main or sub) as complete
+- `/og-summary` — daily summary for the active roadmap
+- `/og-remind` — show focus reminder for the active roadmap
 
 ### Tasks
 - `/task-add <title> [priority]` — add a task (priority optional: high/medium/low)
-- `/task-list` — show tasks in the active list
+- `/task-list` — show tasks in the active roadmap
 - `/task-done <id>` — mark a task complete
 - `/task-delete <id>` — delete a task
 - `/task-clear` — remove all completed tasks
 
 ### Dashboard
-- `/today` — full dashboard for the active list (goals + tasks + focus + stats)
+- `/today` — full dashboard for the active roadmap (goals + tasks + focus + stats)
 
 ## Underlying CLI
 
 All slash commands shell out to the same Go binary at
-`~/.config/opencode/skills/goal-tracker/goals`. Run `goals help` for the
+`~/.config/opencode/skills/goal-tracker/og`. Run `og help` for the
 full subcommand list. Notable subcommands map 1:1 with the slash commands:
 
 ```
-goals list                            # /goals-list
-goals add-main <title>                # /goals-main
-goals add-sub <parent-id> <title>     # /goals-sub
-goals done <id>                       # /goals-done
-goals summary | remind | today
-goals task-list | task-add | task-done | task-delete | task-clear
-goals list-ls | list-create <name> | list-use <id|name>
-goals list-rename <id|name> <new-name> | list-delete <id|name> | list-show <id|name>
+og list                            # /og-list
+og add-main <title>                # /og-main
+og add-sub <parent-id> <title>     # /og-sub
+og done <id>                       # /og-done
+og summary | remind | today
+og task-list | task-add | task-done | task-delete | task-clear
+og list-ls | list-create <name> | list-use <id|name>
+og list-rename <id|name> <new-name> | list-delete <id|name> | list-show <id|name>
 ```
 
 ## Example Workflow
@@ -97,8 +97,8 @@ goals list-rename <id|name> <new-name> | list-delete <id|name> | list-show <id|n
 **First-time setup:**
 ```
 You: /ogc work
-Me:  ✅ Created list: "work" (now active)
-You: /goals-main Ship the v1.2 release
+Me:  ✅ Created roadmap: "work" (now active)
+You: /og-main Ship the v1.2 release
 You: /task-add Review PR high
 ```
 
@@ -112,21 +112,21 @@ Me:  shows active goals, prioritized tasks, what was completed yesterday,
 **Switching contexts:**
 ```
 You: /ogc personal      # creates and switches to "personal"
-You: /goals-main Plan vacation
-You: /ogs work          # back to work list
+You: /og-main Plan vacation
+You: /ogs work          # back to work roadmap
 ```
 
 **End of day:**
 ```
-You: /goals-summary
+You: /og-summary
 Me:  completed today, in progress, added today, next focus
 ```
 
 ## Error Handling
 
 - Writes are atomic: temp file + rename. If anything fails, `goals.json` is unchanged.
-- Pre-existing data without a `list_id` is migrated to the active list once and persisted.
-- Invalid IDs and missing lists fail with clear error messages, never silent corruption.
+- Pre-existing data without a `list_id` is migrated to the active roadmap once and persisted.
+- Invalid IDs and missing roadmaps fail with clear error messages, never silent corruption.
 
 ## Privacy
 

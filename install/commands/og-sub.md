@@ -5,13 +5,13 @@ subtask: false
 ---
 
 Current goals:
-!`~/.config/opencode/skills/goal-tracker/goals list`
+!`og list`
 
 Add sub-goal with:
 - Parent ID: $1
 - Title: $2
 
 Please add this sub-goal by running:
-!`~/.config/opencode/skills/goal-tracker/goals add-sub $1 $2`
+!`og add-sub $1 $2`
 
 Then show the updated goal structure.

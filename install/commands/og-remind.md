@@ -4,7 +4,7 @@ agent: general
 subtask: false
 ---
 
-!`~/.config/opencode/skills/goal-tracker/goals remind`
+!`og remind`
 
 Current context:
 - Working in: !`pwd`

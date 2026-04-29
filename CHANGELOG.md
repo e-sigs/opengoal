@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-29
+
+### Breaking
+- **CLI renamed**: `goals` → `og`. Update all scripts/invocations.
+- **Slash commands renamed**: `/goals-*` → `/og-*` (e.g. `/goals-main` → `/og-main`).
+- **Repo restructured**: source moved from `main.go` (root) to `cmd/og/`. OpenCode integration files moved to `install/agents/` and `install/commands/`.
+- Display vocabulary changed: "list" → "roadmap" in user-facing output (CLI subcommands `list-create`, `list-use`, etc. unchanged for backwards compat).
+
+### Added
+- **Multi-agent coordination**: `task-claim`, `task-release`, `task-next [--claim]`, `task-show`, `task-add --depends id1,id2`. File-locked (flock) so multiple agents can safely operate on the same data.
+- **Append-only event log** at `~/.local/share/opencode/goals.events.jsonl`. New `og events [--follow] [--since 5m] [--filter substr]` subcommand.
+- **Three OpenCode agents**: `orchestrator` (primary, event-driven loop), `worker` (claims/completes work), `reviewer` (validates with `Review:`-task pattern using `--depends`).
+- **Stale claim auto-expiry** (default 1800s, configurable via `$OPENGOAL_CLAIM_TTL`).
+- **`Makefile`** with `make install`, `make install-bin`, `make install-opencode`, `make uninstall`, `make test`, `make clean`.
+- Consolidated entry-point `README.md`; deeper docs moved to `docs/`.
+
+### Changed
+- `install.sh` rewritten to install both binary and OpenCode integration in one step.
+- Release workflow updates binary names from `goals-*` to `og-*` and uses `./cmd/og`.
+
+### Migration from 1.x
+1. `git pull && make install` (binary will be at `~/.local/bin/og`).
+2. Update any custom scripts: `goals X` → `og X`.
+3. Update slash command muscle memory: `/goals-X` → `/og-X`.
+4. Data file at `~/.local/share/opencode/goals.json` is unchanged — no migration needed.
+
 ## [1.1.1] - 2026-04-28
 
 ### Fixed
@@ -75,3 +101,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.1.1]: https://github.com/e-sigs/opengoal/releases/tag/v1.1.1
 [1.1.0]: https://github.com/e-sigs/opengoal/releases/tag/v1.1.0
 [1.0.0]: https://github.com/e-sigs/opengoal/releases/tag/v1.0.0
+[2.0.0]: https://github.com/e-sigs/opengoal/releases/tag/v2.0.0

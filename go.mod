@@ -1,3 +1,3 @@
-module goal-tracker
+module github.com/e-sigs/opengoal
 
-go 1.25.0
+go 1.25
