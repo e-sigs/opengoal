@@ -45,11 +45,50 @@ cp install/commands/*.md "$OPENCODE_DIR/commands/"
 echo
 echo "✅ opengoal installed."
 echo
+add_to_path() {
+  local rc_file="$1"
+  local line="$2"
+  mkdir -p "$(dirname "$rc_file")"
+  touch "$rc_file"
+  if grep -Fqs "$line" "$rc_file"; then
+    echo "→ PATH entry already present in $rc_file"
+    return 0
+  fi
+  {
+    echo ""
+    echo "# Added by opengoal install.sh"
+    echo "$line"
+  } >> "$rc_file"
+  echo "→ added $BINDIR to PATH in $rc_file"
+  echo "   reload your shell or run:  source $rc_file"
+}
+
 case ":$PATH:" in
-  *":$BINDIR:"*) ;;
+  *":$BINDIR:"*)
+    ;;
   *)
-    echo "⚠️  $BINDIR is not on your PATH. Add this to your shell rc:"
-    echo "    export PATH=\"$BINDIR:\$PATH\""
+    shell_name="$(basename "${SHELL:-}")"
+    case "$shell_name" in
+      zsh)
+        add_to_path "$HOME/.zshrc" "export PATH=\"$BINDIR:\$PATH\""
+        ;;
+      bash)
+        # Prefer ~/.bashrc on Linux, ~/.bash_profile on macOS login shells
+        if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.bash_profile" ]; then
+          add_to_path "$HOME/.bash_profile" "export PATH=\"$BINDIR:\$PATH\""
+        else
+          add_to_path "$HOME/.bashrc" "export PATH=\"$BINDIR:\$PATH\""
+        fi
+        ;;
+      fish)
+        add_to_path "$HOME/.config/fish/config.fish" "set -gx PATH $BINDIR \$PATH"
+        ;;
+      *)
+        echo "⚠️  $BINDIR is not on your PATH and shell '$shell_name' is not auto-supported."
+        echo "    Add this to your shell rc manually:"
+        echo "        export PATH=\"$BINDIR:\$PATH\""
+        ;;
+    esac
     echo
     ;;
 esac
