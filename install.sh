@@ -5,13 +5,17 @@
 # Env overrides:
 #   PREFIX     install prefix for the binary (default: $HOME/.local)
 #   BINDIR     binary dir (default: $PREFIX/bin)
-#   OPENCODE   opencode config dir (default: $HOME/.config/opencode)
+#   OPENCODE_DIR  opencode config dir (default: $HOME/.config/opencode)
+#
+# NOTE: do not name this OPENCODE — opencode itself exports OPENCODE=1 in
+# child processes, which would shadow this variable when install.sh is run
+# from inside an opencode session.
 
 set -euo pipefail
 
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="${BINDIR:-$PREFIX/bin}"
-OPENCODE="${OPENCODE:-$HOME/.config/opencode}"
+OPENCODE_DIR="${OPENCODE_DIR:-$HOME/.config/opencode}"
 BIN="og"
 
 repo_root="$(cd "$(dirname "$0")" && pwd)"
@@ -30,13 +34,13 @@ echo "→ installing $BINDIR/$BIN"
 mkdir -p "$BINDIR"
 install -m 0755 "$BIN" "$BINDIR/$BIN"
 
-echo "→ installing OpenCode agents into $OPENCODE/agents/"
-mkdir -p "$OPENCODE/agents"
-cp install/agents/*.md "$OPENCODE/agents/"
+echo "→ installing OpenCode agents into $OPENCODE_DIR/agents/"
+mkdir -p "$OPENCODE_DIR/agents"
+cp install/agents/*.md "$OPENCODE_DIR/agents/"
 
-echo "→ installing OpenCode slash commands into $OPENCODE/commands/"
-mkdir -p "$OPENCODE/commands"
-cp install/commands/*.md "$OPENCODE/commands/"
+echo "→ installing OpenCode slash commands into $OPENCODE_DIR/commands/"
+mkdir -p "$OPENCODE_DIR/commands"
+cp install/commands/*.md "$OPENCODE_DIR/commands/"
 
 echo
 echo "✅ opengoal installed."
