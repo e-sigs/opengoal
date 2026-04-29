@@ -19,10 +19,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -67,31 +65,8 @@ func agentID() string {
 // ──────────────────────────────────────────────────────────────────
 
 // withLock takes an exclusive advisory lock on goals.json.lock for the
-// duration of fn. The lock file is created if missing and is never
-// removed (removing it would race with other holders). Blocks until the
-// lock is acquired.
-//
-// Wrap every read-modify-write sequence with this. Pure-read commands
-// don't strictly need it (atomic rename gives them a consistent snapshot)
-// but using it doesn't hurt correctness, only throughput.
-func withLock(fn func()) {
-	path := getGoalsFilePath() + ".lock"
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		fatalf("Error creating lock dir: %v", err)
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		fatalf("Error opening lock file: %v", err)
-	}
-	defer f.Close()
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		fatalf("Error acquiring lock: %v", err)
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-
-	fn()
-}
+// duration of fn. Implemented per-OS (see lock_unix.go, lock_windows.go).
+// Wrap every read-modify-write sequence with this.
 
 // ──────────────────────────────────────────────────────────────────
 // Claim state helpers
