@@ -6,4 +6,4 @@ subtask: false
 
 !`og list-ls`
 
-Show the output above as-is. Do not add commentary.
+Do not add any commentary or repeat the output above. The user has already seen it.

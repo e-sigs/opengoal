@@ -7,4 +7,4 @@ argument-hint: <roadmap-name>
 
 !`og list-use $ARGUMENTS`
 
-Show the output above as-is. If no name was provided, briefly tell the user the usage is `/ogs <roadmap-name>` and suggest `/ogl` to see available roadmaps.
+Do not repeat the output above — the user has already seen it. If no name was provided, briefly tell the user the usage is `/ogs <roadmap-name>` and suggest `/ogl` to see available roadmaps.
