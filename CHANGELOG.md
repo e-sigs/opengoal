@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-29
+
+### Added
+- **Bulk delete & multi-select**: `task-delete`, `done`, and `list-delete` now accept multiple IDs in a single invocation.
+- New filter flags for `task-delete`:
+  - `--all` — delete every task in the active roadmap
+  - `--priority <high|medium|low>` — delete every task at that priority
+  - `--completed` — delete every completed task
+- Confirm-by-default for destructive operations: shows a summary preview and prompts `[y/N]` on a TTY. Pass `-y` / `--yes` to skip.
+- Non-interactive safety: when stdin is not a terminal and `-y` is absent, the command refuses with a clear hint instead of silently aborting.
+- Slash commands `/task-delete`, `/ogd`, `/og-done` rewritten as multi-select pickers with explicit confirmation.
+
+### Changed
+- `printUsage` now documents the new flags and multi-arg signatures.
+
+### Internal
+- New `cmd/og/bulk.go` (flag parsing, confirmation prompt, summary printer) and `cmd/og/tty.go` (TTY detection via `golang.org/x/term`).
+- Adds dependency: `golang.org/x/term v0.42.0`.
+
 ## [2.0.0] - 2026-04-29
 
 ### Breaking

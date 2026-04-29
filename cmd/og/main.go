@@ -531,6 +531,78 @@ func markDone(goalID string) {
 	die("Error: Goal with ID %q not found.", goalID)
 }
 
+// markDoneBulk marks multiple goals (main or sub) as completed in one pass.
+// Reports each found goal; missing IDs are warned about but don't abort.
+func markDoneBulk(ids []string, yes bool) {
+	if len(ids) == 0 {
+		die("Error: at least one goal ID is required.")
+	}
+	if len(ids) == 1 {
+		// Preserve the single-ID behavior (no confirmation prompt for one).
+		markDone(ids[0])
+		return
+	}
+
+	data := readGoals()
+
+	type pending struct {
+		id, title, kind string // kind: "main" | "sub"
+	}
+	var found []pending
+	var missing []string
+
+	for _, id := range ids {
+		matched := false
+		for _, mg := range data.MainGoals {
+			if mg.ID == id {
+				found = append(found, pending{id: id, title: mg.Title, kind: "main"})
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		for _, sg := range data.SubGoals {
+			if sg.ID == id {
+				found = append(found, pending{id: id, title: sg.Title, kind: "sub"})
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			missing = append(missing, id)
+		}
+	}
+
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  %d ID(s) not found: %s\n", len(missing), strings.Join(missing, ", "))
+	}
+
+	if len(found) == 0 {
+		fmt.Fprintln(os.Stderr, "ℹ️  No goals matched.")
+		os.Exit(1)
+	}
+
+	titles := make([]string, len(found))
+	for i, p := range found {
+		titles[i] = fmt.Sprintf("%s: %s  (id: %s)", p.kind, p.title, p.id)
+	}
+	fmt.Printf("\nAbout to mark %d goal(s) as complete:\n", len(found))
+	printSummaryList(titles, 12)
+
+	if !confirmPrompt(fmt.Sprintf("\nMark %d goal(s) complete?", len(found)), yes) {
+		fmt.Fprintln(os.Stderr, "Aborted.")
+		return
+	}
+
+	// Apply each via the existing single-goal markDone, which handles
+	// progress propagation and parent auto-completion.
+	for _, p := range found {
+		markDone(p.id)
+	}
+}
+
 func generateSummary() {
 	data := readGoals()
 	if len(data.Roadmaps) == 0 {
@@ -883,6 +955,140 @@ func deleteTask(taskID string) {
 	})
 }
 
+// deleteTasksBulk deletes multiple tasks identified by IDs and/or filter
+// criteria. Confirms by default; pass yes=true to skip the prompt.
+//
+// Selection rules:
+//   - If b.all is set, every task in the active roadmap is targeted.
+//   - If b.priority is set, every task with that priority is targeted.
+//   - If b.filter == "completed", every completed task is targeted.
+//   - Any explicit IDs in b.ids are added to the target set.
+//   - Selections are unioned. Duplicates are deduplicated.
+//
+// Tasks not found are reported but do not abort the operation.
+func deleteTasksBulk(b bulkArgs) {
+	data := readGoals()
+	activeID := data.ActiveRoadmapID
+
+	targets := map[string]Task{} // id → task
+	missing := []string{}
+
+	// Explicit IDs first (so we can report missing ones cleanly).
+	for _, id := range b.ids {
+		found := false
+		for _, t := range data.Tasks {
+			if t.ID == id {
+				targets[t.ID] = t
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, id)
+		}
+	}
+
+	// Filters operate on tasks in the active roadmap only.
+	if b.all || b.priority != "" || b.filter != "" {
+		for _, t := range data.Tasks {
+			if t.RoadmapID != activeID {
+				continue
+			}
+			switch {
+			case b.all:
+				targets[t.ID] = t
+			case b.priority != "" && t.Priority == b.priority:
+				targets[t.ID] = t
+			case b.filter == "completed" && t.Completed:
+				targets[t.ID] = t
+			}
+		}
+	}
+
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  %d ID(s) not found: %s\n", len(missing), strings.Join(missing, ", "))
+	}
+
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stderr, "ℹ️  No tasks matched the selection.")
+		if len(missing) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Build deterministic preview order: by priority, then created.
+	preview := make([]Task, 0, len(targets))
+	for _, t := range targets {
+		preview = append(preview, t)
+	}
+	sortTasksForDisplay(preview)
+
+	titles := make([]string, len(preview))
+	for i, t := range preview {
+		marker := "○"
+		if t.Completed {
+			marker = "✓"
+		}
+		titles[i] = fmt.Sprintf("%s [%s] %s  (id: %s)", marker, t.Priority, t.Title, t.ID)
+	}
+
+	fmt.Printf("\nAbout to delete %d task(s):\n", len(preview))
+	printSummaryList(titles, 12)
+
+	if !confirmPrompt(fmt.Sprintf("\nDelete %d task(s)?", len(preview)), b.yes) {
+		fmt.Fprintln(os.Stderr, "Aborted.")
+		return
+	}
+
+	// Apply.
+	withLock(func() {
+		fresh := readGoals()
+		removed := 0
+		kept := fresh.Tasks[:0]
+		for _, t := range fresh.Tasks {
+			if _, hit := targets[t.ID]; hit {
+				removed++
+				appendEvent(Event{
+					Event:  EvTaskDeleted,
+					TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
+				})
+				continue
+			}
+			kept = append(kept, t)
+		}
+		fresh.Tasks = append([]Task{}, kept...)
+		writeGoals(fresh)
+		fmt.Printf("\n🗑️  Deleted %d task(s).\n\n", removed)
+	})
+}
+
+// sortTasksForDisplay sorts in place: high → medium → low → unset, then by Created ascending.
+func sortTasksForDisplay(ts []Task) {
+	prio := func(p string) int {
+		switch p {
+		case PriorityHigh:
+			return 0
+		case PriorityMedium:
+			return 1
+		case PriorityLow:
+			return 2
+		}
+		return 3
+	}
+	for i := 1; i < len(ts); i++ {
+		for j := i; j > 0; j-- {
+			a, b := ts[j-1], ts[j]
+			if prio(a.Priority) > prio(b.Priority) ||
+				(prio(a.Priority) == prio(b.Priority) && a.Created.After(b.Created)) {
+				ts[j-1], ts[j] = b, a
+			} else {
+				break
+			}
+		}
+	}
+}
+
 func clearCompletedTasks() {
 	withLock(func() {
 		data := readGoals()
@@ -1228,6 +1434,87 @@ func listDelete(idOrName string) {
 	}
 }
 
+// listDeleteBulk deletes multiple roadmaps by ID or name in one pass.
+// Confirms by default; pass yes=true to skip the prompt.
+func listDeleteBulk(idsOrNames []string, yes bool) {
+	if len(idsOrNames) == 0 {
+		die("Error: at least one roadmap id or name is required.")
+	}
+	if len(idsOrNames) == 1 {
+		// Preserve the single-item behavior (no extra confirmation prompt).
+		listDelete(idsOrNames[0])
+		return
+	}
+
+	data := readGoals()
+	type pending struct {
+		idx int
+		ref Roadmap
+	}
+	seen := map[string]bool{} // dedupe by roadmap ID
+	var found []pending
+	var missing []string
+
+	for _, q := range idsOrNames {
+		idx := findRoadmap(data, q)
+		if idx == -1 {
+			missing = append(missing, q)
+			continue
+		}
+		rm := data.Roadmaps[idx]
+		if seen[rm.ID] {
+			continue
+		}
+		seen[rm.ID] = true
+		found = append(found, pending{idx: idx, ref: rm})
+	}
+
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  %d not found: %s\n", len(missing), strings.Join(missing, ", "))
+	}
+	if len(found) == 0 {
+		fmt.Fprintln(os.Stderr, "ℹ️  No roadmaps matched.")
+		os.Exit(1)
+	}
+
+	// Build summary including counts of nested goals/tasks.
+	titles := make([]string, len(found))
+	for i, p := range found {
+		mains, subs, tasks := 0, 0, 0
+		for _, mg := range data.MainGoals {
+			if mg.RoadmapID == p.ref.ID {
+				mains++
+			}
+		}
+		for _, sg := range data.SubGoals {
+			if sg.RoadmapID == p.ref.ID {
+				subs++
+			}
+		}
+		for _, t := range data.Tasks {
+			if t.RoadmapID == p.ref.ID {
+				tasks++
+			}
+		}
+		titles[i] = fmt.Sprintf("%s  (%d main, %d sub, %d tasks)  id=%s",
+			p.ref.Name, mains, subs, tasks, p.ref.ID)
+	}
+
+	fmt.Printf("\nAbout to delete %d roadmap(s) and ALL their contents:\n", len(found))
+	printSummaryList(titles, 12)
+
+	if !confirmPrompt(fmt.Sprintf("\nDelete %d roadmap(s)?", len(found)), yes) {
+		fmt.Fprintln(os.Stderr, "Aborted.")
+		return
+	}
+
+	// Apply each via the existing single-delete (which handles the active-id
+	// fallback after each removal correctly).
+	for _, p := range found {
+		listDelete(p.ref.ID)
+	}
+}
+
 func listShow(idOrName string) {
 	data := readGoals()
 	idx := findRoadmap(data, idOrName)
@@ -1310,7 +1597,7 @@ Goals:
   list                              Roadmap goals in active roadmap
   add-main <title>                  Add a main goal
   add-sub <parent-id> <title>       Add a sub-goal under <parent-id>
-  done <id>                         Mark goal as complete
+  done <id...> [-y]                 Mark one or more goals as complete
   summary                           Generate daily summary
   remind                            Show reminder
 
@@ -1320,7 +1607,10 @@ Tasks:
                                     Add a task (priority: high|medium|low)
   task-show <id>                    Show one task with deps + claim status
   task-done <id>                    Mark task as complete
-  task-delete <id>                  Delete a task
+  task-delete <id...> [-y]          Delete one or more tasks
+  task-delete --all [-y]            Delete every task in active roadmap
+  task-delete --priority <h|m|l>    Delete every task at given priority
+  task-delete --completed           Delete every completed task
   task-clear                        Remove all completed tasks
 
 Multi-agent coordination:
@@ -1346,7 +1636,7 @@ Roadmaps:
   list-create <name>                Create a roadmap and switch to it
   list-use <id|name>                Switch active roadmap
   list-rename <id|name> <new-name>  Rename a roadmap
-  list-delete <id|name>             Delete a roadmap and its contents
+  list-delete <id|name>... [-y]     Delete one or more roadmaps and their contents
   list-show <id|name>               Show one roadmap's full tree
 
 Inside OpenCode, prefer the slash commands:
@@ -1394,7 +1684,11 @@ func main() {
 
 	case "done":
 		requireArg(args, "a goal ID")
-		markDone(args[0])
+		b := parseBulkArgs(args, nil)
+		if len(b.ids) == 0 {
+			die("Error: done requires a goal ID.")
+		}
+		markDoneBulk(b.ids, b.yes)
 
 	case "summary":
 		generateSummary()
@@ -1448,8 +1742,11 @@ func main() {
 		markTaskDone(args[0])
 
 	case "task-delete":
-		requireArg(args, "a task ID")
-		deleteTask(args[0])
+		b := parseBulkArgs(args, map[string]bool{"completed": true})
+		if len(b.ids) == 0 && !b.all && b.priority == "" && b.filter == "" {
+			die("Error: task-delete requires task ID(s) or one of --all, --priority, --completed.")
+		}
+		deleteTasksBulk(b)
 
 	case "task-clear":
 		clearCompletedTasks()
@@ -1530,7 +1827,25 @@ func main() {
 
 	case "list-delete":
 		requireArg(args, "a list id or name")
-		listDelete(strings.Join(args, " "))
+		// If any flag is present, parse in bulk mode (positional = ids/names).
+		// Otherwise preserve legacy behavior where a multi-word name is
+		// joined back together (e.g. `og list-delete My Roadmap`).
+		hasFlag := false
+		for _, a := range args {
+			if strings.HasPrefix(a, "-") {
+				hasFlag = true
+				break
+			}
+		}
+		if hasFlag {
+			b := parseBulkArgs(args, nil)
+			if len(b.ids) == 0 {
+				die("Error: list-delete requires at least one roadmap id or name.")
+			}
+			listDeleteBulk(b.ids, b.yes)
+		} else {
+			listDelete(strings.Join(args, " "))
+		}
 
 	case "list-show":
 		requireArg(args, "a list id or name")
