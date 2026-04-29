@@ -1,34 +1,27 @@
 # OpenCode Goal Tracker 🎯
 
-A lightning-fast goal and task tracking system for [OpenCode](https://opencode.ai) with persistent memory, progress tracking, and a comprehensive dashboard.
+A lightning-fast goal and task tracking system for [OpenCode](https://opencode.ai) with multiple lists, persistent memory, progress tracking, and a unified dashboard.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?logo=go)](https://go.dev)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)]()
 
-## ⚡ Performance
-
-- **12ms** average response time
-- **14x faster** than JavaScript alternatives
-- Single compiled binary, no runtime needed
-- Only **~2.5MB** compressed
-
 ## ✨ Features
 
-- 🎯 **Goals System** - Main goals with sub-goals and automatic progress tracking
-- ✅ **Task List** - Quick todos with priority levels (high/medium/low)
-- 📊 **Today Dashboard** - See everything at a glance with `/today`
-- 💾 **Persistent Memory** - All data survives across sessions
-- 🔄 **Auto-completion** - Main goals auto-complete when all sub-goals are done
-- 📈 **Progress Tracking** - Automatic percentage calculations
-- 📅 **Daily Summaries** - Review your accomplishments
-- 🎨 **Beautiful Output** - Color-coded, emoji-rich interface
+- 📂 **Multiple lists** — separate work, personal, and side-project items; switch with one command
+- 🎯 **Goals & sub-goals** with automatic progress tracking and auto-completion
+- ✅ **Tasks** with optional priorities (high / medium / low)
+- 📊 **`/today` dashboard** — goals + tasks + focus + stats in one view
+- 💾 **Atomic writes** — `goals.json` is replaced via temp-file rename, never corrupted
+- 🚀 **Single static Go binary** (~2 MB), no runtime dependencies
+- 🔒 **Local-only** — nothing ever leaves your machine
 
-## 📸 Screenshot
+## 📸 Dashboard
 
 ```
 ╔════════════════════════════════════════════════╗
-║  📅 TODAY - Thursday, April 23, 2026
+║  📅 TODAY - Tuesday, April 28, 2026
+║  📂 List: work
 ╚════════════════════════════════════════════════╝
 
 🎯 ACTIVE GOALS
@@ -46,12 +39,6 @@ Implement user authentication [60%]
 🟡 MEDIUM PRIORITY:
   1. Update documentation
 
-✅ COMPLETED TODAY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Goals:
-  ✓ Research JWT implementation
-
 🔥 FOCUS NOW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -65,224 +52,167 @@ Goals:
   Completed Today: 1
 ```
 
-## 🚀 Quick Install
+## 🚀 Install
 
-### One-Line Install
+### One-line install (latest release)
 
 ```bash
-curl -fsSL https://gitlab.com/sig/opengoal/-/raw/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/e-sigs/opengoal/main/install.sh | bash
 ```
 
-### Manual Install
-
-1. Download the binary for your platform from [Releases](https://gitlab.com/sig/opengoal/-/releases)
-2. Extract and run the install script:
+### From source
 
 ```bash
-chmod +x install.sh
-./install.sh
-```
-
-### Build from Source
-
-```bash
-git clone https://gitlab.com/sig/opengoal.git
+git clone https://github.com/e-sigs/opengoal.git
 cd opengoal
-go build -o goals main.go
 ./install.sh
 ```
 
-## 📚 Usage
+The installer:
+- Builds (or downloads) the `goals` binary
+- Copies the skill to `~/.config/opencode/skills/goal-tracker/`
+- Copies all slash commands to `~/.config/opencode/commands/`
+- Initializes `~/.local/share/opencode/goals.json` if missing
 
-### Commands
+After installing, restart OpenCode and run `/today`.
+
+## 📚 Commands
+
+### Lists
 
 | Command | Description |
-|---------|-------------|
-| `/today` | Show complete dashboard |
-| `/goals-main <title>` | Add a main goal |
-| `/goals-sub <parent-id> <title>` | Add a sub-goal |
-| `/goals-list` | List all goals with progress |
-| `/goals-done <id>` | Mark goal complete |
-| `/goals-summary` | Generate daily summary |
-| `/goals-remind` | Show reminders |
-| `/task-add <title> [priority]` | Add task (priority: high/medium/low) |
-| `/task-list` | List all tasks |
-| `/task-done <id>` | Mark task complete |
-| `/task-delete <id>` | Delete a task |
-| `/task-clear` | Clear completed tasks |
+|---|---|
+| `/og` | Interactive list browser (pick / switch / rename / delete) |
+| `/ogl` | Show all lists |
+| `/ogc <name>` | Create a new list and switch to it |
+| `/ogs <name>` | Switch the active list |
+| `/ogd [name]` | Delete a list (prompts for confirmation) |
 
-### Example Workflow
+### Goals
+
+| Command | Description |
+|---|---|
+| `/goals-main <title>` | Add a main goal in the active list |
+| `/goals-sub <parent-id> <title>` | Add a sub-goal under a main goal |
+| `/goals-list` | List goals in the active list |
+| `/goals-done <id>` | Mark a goal complete (main or sub) |
+| `/goals-summary` | Daily summary for the active list |
+| `/goals-remind` | Show what to focus on now |
+
+### Tasks
+
+| Command | Description |
+|---|---|
+| `/task-add <title> [priority]` | Add a task (priority: high/medium/low) |
+| `/task-list` | List tasks in the active list |
+| `/task-done <id>` | Mark a task complete |
+| `/task-delete <id>` | Delete a task |
+| `/task-clear` | Remove all completed tasks |
+
+### Dashboard
+
+| Command | Description |
+|---|---|
+| `/today` | Full dashboard for the active list |
+
+## 🧭 Example Workflow
 
 ```bash
-# Morning - Check your day
-/today
-
-# Add a main goal
-/goals-main Implement API authentication system
-
-# Agent will suggest sub-goals, add them:
+# First time
+/ogc work                                # create + switch to "work" list
+/goals-main Implement API authentication
 /goals-sub mg-xxx Research JWT best practices
 /goals-sub mg-xxx Create middleware
 /goals-sub mg-xxx Write tests
-
-# Add quick tasks
 /task-add Review pull requests high
-/task-add Update documentation medium
 
-# During the day - mark things complete
+# Switch contexts
+/ogc personal                            # new list, now active
+/goals-main Plan vacation
+/ogs work                                # back to work
+
+# During the day
+/today
 /task-done task-xxx
 /goals-done sg-xxx
 
-# Evening - review your progress
+# End of day
 /goals-summary
 ```
 
 ## 🏗️ Architecture
 
-### File Structure
-
 ```
 ~/.config/opencode/
 ├── skills/goal-tracker/
-│   ├── goals              # Compiled binary
-│   ├── main.go            # Source code
-│   ├── go.mod             # Go module
-│   └── SKILL.md           # OpenCode skill definition
-│
+│   ├── goals          # Compiled Go binary
+│   ├── main.go        # Source
+│   ├── go.mod
+│   └── SKILL.md       # OpenCode skill definition
 └── commands/
-    ├── goals-*.md         # Goal commands
-    ├── task-*.md          # Task commands
-    └── today.md           # Dashboard command
+    ├── og*.md         # List browser commands
+    ├── goals-*.md     # Goal commands
+    ├── task-*.md      # Task commands
+    └── today.md       # Dashboard
 
 ~/.local/share/opencode/
-└── goals.json             # Persistent data store
+└── goals.json         # Persistent data store
 ```
 
-### Data Format
-
-Goals are stored in `~/.local/share/opencode/goals.json`:
+### Data format (excerpt)
 
 ```json
 {
-  "main_goals": [{
-    "id": "mg-xxx",
-    "title": "Implement authentication",
-    "status": "in_progress",
-    "progress": 60,
-    "sub_goals": ["sg-xxx"]
-  }],
-  "sub_goals": [{
-    "id": "sg-xxx",
-    "title": "Research JWT",
-    "parent_id": "mg-xxx",
-    "status": "completed"
-  }],
-  "tasks": [{
-    "id": "task-xxx",
-    "title": "Review PR",
-    "priority": "high",
-    "completed": false
-  }]
+  "lists": [
+    { "id": "list-xxx", "name": "work", "created": "..." }
+  ],
+  "active_list_id": "list-xxx",
+  "main_goals": [
+    { "id": "mg-xxx", "list_id": "list-xxx", "title": "...",
+      "status": "in_progress", "progress": 60, "sub_goals": ["sg-xxx"] }
+  ],
+  "sub_goals": [
+    { "id": "sg-xxx", "list_id": "list-xxx", "parent_id": "mg-xxx",
+      "title": "...", "status": "completed" }
+  ],
+  "tasks": [
+    { "id": "task-xxx", "list_id": "list-xxx", "title": "...",
+      "priority": "high", "completed": false }
+  ]
 }
 ```
 
+Pre-existing files from v1.0 (no `lists`, no `list_id`) are migrated automatically the first time you create a list after upgrading.
+
 ## 🔧 Development
 
-### Prerequisites
-
-- Go 1.20 or higher
-- OpenCode installed
-
-### Building
-
 ```bash
-# Build for your platform
+# Build for current platform
 go build -o goals main.go
 
-# Build for all platforms
+# Build all release binaries into ./dist
 ./build.sh
+
+# Run a quick smoke test against a sandbox HOME
+HOME=/tmp/goals-smoke ./goals today
 ```
-
-### Testing
-
-```bash
-# Test the binary
-./goals today
-./goals list
-./goals task-list
-```
-
-### Project Structure
-
-```
-.
-├── main.go           # Main application
-├── go.mod            # Go module file
-├── install.sh        # Installation script
-├── build.sh          # Cross-platform build script
-├── commands/         # OpenCode command definitions
-│   ├── goals-*.md
-│   ├── task-*.md
-│   └── today.md
-├── SKILL.md          # OpenCode skill definition
-└── docs/             # Documentation
-    ├── README_GO.md
-    ├── GETTING_STARTED.md
-    └── QUICK_REFERENCE.md
-```
-
-## 📦 Release Process
-
-1. Update version in scripts
-2. Run build script: `./build.sh`
-3. Test binaries on each platform
-4. Create GitHub release
-5. Upload binaries from `dist/` folder
-6. Update install script URL
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a merge request
 
 ## 📝 License
 
-MIT License - see [LICENSE](LICENSE) file for details
-
-## 🙏 Acknowledgments
-
-- Built for [OpenCode](https://opencode.ai)
-- Inspired by the need for fast, persistent goal tracking
-- Written in Go for maximum performance
+MIT — see [LICENSE](LICENSE).
 
 ## 🐛 Issues & Support
 
-- **Issues**: [GitLab Issues](https://gitlab.com/sig/opengoal/-/issues)
-- **Merge Requests**: [GitLab MRs](https://gitlab.com/sig/opengoal/-/merge_requests)
+- **Issues**: https://github.com/e-sigs/opengoal/issues
+- **Pull requests**: https://github.com/e-sigs/opengoal/pulls
 
 ## 🗺️ Roadmap
 
-- [ ] Weekly/monthly reports
+- [ ] Weekly / monthly reports
 - [ ] Goal dependencies graph
 - [ ] Time tracking per goal
-- [ ] Export to Markdown/CSV
-- [ ] Goal templates
-- [ ] Tag system for filtering
-- [ ] Built-in encryption for sensitive goals
-- [ ] Sync across devices (optional cloud backend)
-
-## ⭐ Show Your Support
-
-If you find this tool useful, please consider:
-- Giving it a star on GitLab ⭐
-- Sharing it with others
-- Contributing to the project
-- Reporting bugs or suggesting features
+- [ ] Export to Markdown / CSV
+- [ ] Tags for filtering across lists
 
 ---
 

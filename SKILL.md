@@ -1,6 +1,6 @@
 ---
 name: goal-tracker
-description: Track daily main goals and sub-goals with persistent memory, progress tracking, and context awareness
+description: Track daily main goals, sub-goals and tasks across multiple named lists with persistent memory and progress tracking
 license: MIT
 compatibility: opencode
 metadata:
@@ -12,69 +12,36 @@ metadata:
 
 I am your personal goal tracking assistant with persistent memory. I help you:
 
+- **Organize work into named lists** (e.g. work, personal, side-project) and switch between them
 - **Track main goals and sub-goals** across multiple days until completion
+- **Manage tasks** with optional priorities (high / medium / low)
 - **Calculate progress** automatically based on completed sub-goals
-- **Provide context-aware suggestions** based on your current work
 - **Generate daily summaries** of what you accomplished
-- **Remind you proactively** of pending goals and next steps
-- **Maintain goal history** for future reference
+- **Show a unified `today` dashboard** combining goals, tasks, focus and stats
 
 ## Persistent Memory
 
-All goals are stored in `~/.local/share/opencode/goals.json` and persist across:
+All data is stored locally in `~/.local/share/opencode/goals.json` and persists across:
+
 - Multiple OpenCode sessions
 - Different days
 - Different projects
 
-Goals remain active until you explicitly mark them complete.
-
-## When to Use Me
-
-Use this skill when you need to:
-- Start your workday and review pending goals
-- Add a new main goal or break it into sub-goals
-- Check progress on current objectives
-- Mark goals as complete
-- Generate end-of-day summaries
-- Get reminded of what to focus on next
+Goals remain active until you explicitly mark them complete. Writes are atomic (write to a temp file then rename), so the data file is never left in a partial state.
 
 ## How I Work
 
 ### Memory Structure
 
-I maintain three types of data:
+I maintain four collections in a single JSON file:
 
-1. **Main Goals**: High-level objectives that span multiple days
-   - Auto-calculated progress based on sub-goals
-   - Can have associated context (files, directories)
-   - Status: pending, in_progress, completed
-
-2. **Sub Goals**: Actionable tasks that contribute to main goals
-   - Linked to a parent main goal
-   - Tracked individually
-   - Completion updates parent progress
-
-3. **Daily Summaries**: Historical record of your productivity
-   - What you completed each day
-   - What you added
-   - What's still in progress
-
-### Context Awareness
-
-I analyze your current work environment:
-- Current working directory
-- Git repository status
-- Recently modified files
-- Open files in your editor
-
-This helps me:
-- Suggest relevant sub-goals
-- Remind you of related goals when you're working on related code
-- Link goals to specific parts of your codebase
+1. **Lists** — top-level containers. Each list has a unique id and a human-readable name. Exactly one list is "active" at a time; all goal/task commands operate on the active list.
+2. **Main Goals** — high-level objectives that belong to a list. Auto-calculated progress based on sub-goals. Status: `pending`, `in_progress`, `completed`.
+3. **Sub-Goals** — actionable steps under a main goal. Completing all sub-goals auto-completes the parent.
+4. **Tasks** — quick standalone todos with optional priority (`high` / `medium` / `low`).
 
 ### Progress Tracking
 
-Main goal progress is automatically calculated:
 ```
 Progress = (Completed Sub-Goals / Total Sub-Goals) × 100%
 ```
@@ -83,90 +50,84 @@ When all sub-goals are complete, the main goal is auto-completed.
 
 ## Commands Available
 
-The following custom commands work with me:
+### Lists
+- `/og` — interactive list browser (pick / view / switch / rename / delete)
+- `/ogl` — show all lists
+- `/ogc <name>` — create a new list and switch to it
+- `/ogs <name>` — switch the active list
+- `/ogd [name]` — delete a list (with confirmation; prompts to pick if no name)
 
-- `/goals-main <title>` - Add a new main goal
-- `/goals-sub <parent-id> <title>` - Add a sub-goal
-- `/goals-list` - Show all current goals with progress
-- `/goals-done <goal-id>` - Mark a goal as complete
-- `/goals-summary` - Generate today's summary
-- `/goals-remind` - Show what to focus on now
+### Goals
+- `/goals-main <title>` — add a main goal in the active list
+- `/goals-sub <parent-id> <title>` — add a sub-goal under a main goal
+- `/goals-list` — show goals in the active list
+- `/goals-done <id>` — mark a goal (main or sub) as complete
+- `/goals-summary` — daily summary for the active list
+- `/goals-remind` — show focus reminder for the active list
 
-## Smart Suggestions
+### Tasks
+- `/task-add <title> [priority]` — add a task (priority optional: high/medium/low)
+- `/task-list` — show tasks in the active list
+- `/task-done <id>` — mark a task complete
+- `/task-delete <id>` — delete a task
+- `/task-clear` — remove all completed tasks
 
-When you add a main goal, I can:
-- Analyze your codebase to suggest relevant sub-goals
-- Identify related files and directories
-- Detect dependencies between goals
-- Estimate effort based on similar past goals
+### Dashboard
+- `/today` — full dashboard for the active list (goals + tasks + focus + stats)
 
-## Proactive Reminders
+## Underlying CLI
 
-I can remind you of your goals:
-- When you start a new OpenCode session
-- When you're editing files related to a goal
-- At regular intervals during your workday
-- When you haven't made progress in a while
+All slash commands shell out to the same Go binary at
+`~/.config/opencode/skills/goal-tracker/goals`. Run `goals help` for the
+full subcommand list. Notable subcommands map 1:1 with the slash commands:
+
+```
+goals list                            # /goals-list
+goals add-main <title>                # /goals-main
+goals add-sub <parent-id> <title>     # /goals-sub
+goals done <id>                       # /goals-done
+goals summary | remind | today
+goals task-list | task-add | task-done | task-delete | task-clear
+goals list-ls | list-create <name> | list-use <id|name>
+goals list-rename <id|name> <new-name> | list-delete <id|name> | list-show <id|name>
+```
 
 ## Example Workflow
 
-**Morning:**
+**First-time setup:**
 ```
-You: /goals-remind
-Me: Shows your 3 active main goals and suggests what to focus on first
-```
-
-**Adding a goal:**
-```
-You: /goals-main Implement authentication for API endpoints
-Me: Creates main goal, suggests sub-goals like:
-    - Research authentication strategies
-    - Implement JWT token generation
-    - Add middleware for protected routes
-    - Write authentication tests
+You: /ogc work
+Me:  ✅ Created list: "work" (now active)
+You: /goals-main Ship the v1.2 release
+You: /task-add Review PR high
 ```
 
-**Working on code:**
+**Morning check-in:**
 ```
-Context: You're editing src/api/auth.ts
-Me: [Proactive] You're working on "Implement authentication" (60% complete)
-    Next sub-goal: "Add middleware for protected routes"
+You: /today
+Me:  shows active goals, prioritized tasks, what was completed yesterday,
+     and the top 3 things to focus on now
 ```
 
-**Marking complete:**
+**Switching contexts:**
 ```
-You: /goals-done sg-xxx
-Me: Marked complete! Main goal "Implement authentication" is now 80% done.
+You: /ogc personal      # creates and switches to "personal"
+You: /goals-main Plan vacation
+You: /ogs work          # back to work list
 ```
 
 **End of day:**
 ```
 You: /goals-summary
-Me: Shows comprehensive summary:
-    - 4 goals completed today
-    - 2 goals in progress
-    - Tomorrow's recommended focus
-```
-
-## Integration Tips
-
-Add this to your project's `AGENTS.md` for automatic context:
-
-```markdown
-## Daily Goals
-
-Check `/goals-remind` at the start of each session to see active goals.
-When making progress, use `/goals-done <id>` to track completion.
+Me:  completed today, in progress, added today, next focus
 ```
 
 ## Error Handling
 
-If something goes wrong:
-- Goals file is automatically backed up before changes
-- Invalid IDs are caught with helpful error messages
-- Corrupted JSON is restored from backup
-- All operations are atomic (all-or-nothing)
+- Writes are atomic: temp file + rename. If anything fails, `goals.json` is unchanged.
+- Pre-existing data without a `list_id` is migrated to the active list once and persisted.
+- Invalid IDs and missing lists fail with clear error messages, never silent corruption.
 
-## Privacy Note
+## Privacy
 
 All goal data is stored locally on your machine. Nothing is sent to external servers.

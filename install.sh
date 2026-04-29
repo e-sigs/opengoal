@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_NAME="OpenCode Goal Tracker"
 REPO_URL="https://github.com/e-sigs/opengoal"
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 # Colors for output
 RED='\033[0;31m'
@@ -98,8 +98,7 @@ if [ -f "main.go" ]; then
     cp main.go "$HOME/.config/opencode/skills/goal-tracker/"
     cp go.mod "$HOME/.config/opencode/skills/goal-tracker/"
     cp SKILL.md "$HOME/.config/opencode/skills/goal-tracker/"
-    [ -f README_GO.md ] && cp README_GO.md "$HOME/.config/opencode/skills/goal-tracker/"
-    [ -f GETTING_STARTED.md ] && cp GETTING_STARTED.md "$HOME/.config/opencode/skills/goal-tracker/"
+    [ -f README.md ] && cp README.md "$HOME/.config/opencode/skills/goal-tracker/"
     
     # Copy command files
     cp commands/*.md "$HOME/.config/opencode/commands/" 2>/dev/null || true
@@ -131,6 +130,7 @@ else
 
     echo "Downloading skill files..."
     fetch "$RAW_BASE/SKILL.md" "$HOME/.config/opencode/skills/goal-tracker/SKILL.md"
+    fetch "$RAW_BASE/README.md" "$HOME/.config/opencode/skills/goal-tracker/README.md"
 
     echo "Downloading command files..."
     for cmd in goals-done goals-list goals-main goals-remind goals-sub goals-summary \
@@ -173,7 +173,7 @@ echo "  3. Run: ${GREEN}/goals-main <title>${NC} to add a goal"
 echo "  4. Run: ${GREEN}/task-add <title>${NC} to add a task"
 echo ""
 echo -e "${BLUE}Documentation:${NC}"
-echo "  ~/.config/opencode/skills/goal-tracker/GETTING_STARTED.md"
+echo "  ~/.config/opencode/skills/goal-tracker/README.md"
 echo ""
 echo -e "${BLUE}Available Commands:${NC}"
 echo "  /today           - Show dashboard"
