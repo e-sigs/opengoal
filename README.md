@@ -52,6 +52,14 @@ Implement user authentication [60%]
   Completed Today: 1
 ```
 
+## 📋 Requirements
+
+- **[OpenCode](https://opencode.ai)** — opengoal is an OpenCode skill, not a standalone tool
+- **OS**: macOS, Linux, or Windows (amd64 or arm64)
+- **Building from source only**: Go 1.25+
+
+No runtime dependencies — opengoal is a single static binary.
+
 ## 🚀 Install
 
 ### One-line install (latest release)
