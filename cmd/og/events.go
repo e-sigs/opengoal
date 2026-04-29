@@ -34,24 +34,24 @@ import (
 // ──────────────────────────────────────────────────────────────────
 
 type Event struct {
-	TS     time.Time      `json:"ts"`
-	Actor  string         `json:"actor"`
-	Event  string         `json:"event"`
-	TaskID string         `json:"task_id,omitempty"`
-	ListID string         `json:"list_id,omitempty"`
-	Title  string         `json:"title,omitempty"`
-	Data   map[string]any `json:"data,omitempty"`
+	TS        time.Time      `json:"ts"`
+	Actor     string         `json:"actor"`
+	Event     string         `json:"event"`
+	TaskID    string         `json:"task_id,omitempty"`
+	RoadmapID string         `json:"list_id,omitempty"`
+	Title     string         `json:"title,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
 }
 
 const (
-	EvTaskAdded      = "task.added"
-	EvTaskClaimed    = "task.claimed"
-	EvTaskReleased   = "task.released"
-	EvTaskCompleted  = "task.completed"
-	EvTaskUnblocked  = "task.unblocked"
-	EvTaskDeleted    = "task.deleted"
-	EvClaimRefused   = "claim.refused"
-	EvTaskCleared    = "task.cleared"
+	EvTaskAdded     = "task.added"
+	EvTaskClaimed   = "task.claimed"
+	EvTaskReleased  = "task.released"
+	EvTaskCompleted = "task.completed"
+	EvTaskUnblocked = "task.unblocked"
+	EvTaskDeleted   = "task.deleted"
+	EvClaimRefused  = "claim.refused"
+	EvTaskCleared   = "task.cleared"
 )
 
 // ──────────────────────────────────────────────────────────────────

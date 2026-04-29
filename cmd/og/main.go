@@ -41,7 +41,7 @@ const (
 // Data structures
 // ──────────────────────────────────────────────────────────────────
 
-type List struct {
+type Roadmap struct {
 	ID      string    `json:"id"`
 	Name    string    `json:"name"`
 	Created time.Time `json:"created"`
@@ -49,7 +49,7 @@ type List struct {
 
 type MainGoal struct {
 	ID          string     `json:"id"`
-	ListID      string     `json:"list_id"`
+	RoadmapID   string     `json:"list_id"`
 	Title       string     `json:"title"`
 	Created     time.Time  `json:"created"`
 	Status      string     `json:"status"`
@@ -61,7 +61,7 @@ type MainGoal struct {
 
 type SubGoal struct {
 	ID          string     `json:"id"`
-	ListID      string     `json:"list_id"`
+	RoadmapID   string     `json:"list_id"`
 	Title       string     `json:"title"`
 	ParentID    string     `json:"parent_id"`
 	Created     time.Time  `json:"created"`
@@ -71,7 +71,7 @@ type SubGoal struct {
 
 type Task struct {
 	ID          string     `json:"id"`
-	ListID      string     `json:"list_id"`
+	RoadmapID   string     `json:"list_id"`
 	Title       string     `json:"title"`
 	Created     time.Time  `json:"created"`
 	Completed   bool       `json:"completed"`
@@ -92,11 +92,11 @@ type Task struct {
 }
 
 type GoalsData struct {
-	Lists        []List     `json:"lists"`
-	ActiveListID string     `json:"active_list_id"`
-	MainGoals    []MainGoal `json:"main_goals"`
-	SubGoals     []SubGoal  `json:"sub_goals"`
-	Tasks        []Task     `json:"tasks"`
+	Roadmaps        []Roadmap  `json:"lists"`
+	ActiveRoadmapID string     `json:"active_list_id"`
+	MainGoals       []MainGoal `json:"main_goals"`
+	SubGoals        []SubGoal  `json:"sub_goals"`
+	Tasks           []Task     `json:"tasks"`
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ func ensureGoalsFile() {
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		writeGoals(GoalsData{
-			Lists:     []List{},
+			Roadmaps:  []Roadmap{},
 			MainGoals: []MainGoal{},
 			SubGoals:  []SubGoal{},
 			Tasks:     []Task{},
@@ -160,12 +160,12 @@ func readGoals() GoalsData {
 	if data.Tasks == nil {
 		data.Tasks = []Task{}
 	}
-	if data.Lists == nil {
-		data.Lists = []List{}
+	if data.Roadmaps == nil {
+		data.Roadmaps = []Roadmap{}
 	}
 
-	mutated := ensureActiveList(&data)
-	mutated = migrateOrphanListIDs(&data) || mutated
+	mutated := ensureActiveRoadmap(&data)
+	mutated = migrateOrphanRoadmapIDs(&data) || mutated
 
 	if mutated {
 		writeGoals(data)
@@ -211,76 +211,76 @@ func writeGoals(data GoalsData) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// List management & migration
+// Roadmap management & migration
 // ──────────────────────────────────────────────────────────────────
 
-// ensureActiveList syncs ActiveListID with the current Lists slice.
+// ensureActiveRoadmap syncs ActiveRoadmapID with the current Roadmaps slice.
 // It does NOT auto-create lists. Returns true if data was mutated.
-func ensureActiveList(data *GoalsData) bool {
-	if len(data.Lists) == 0 {
-		if data.ActiveListID != "" {
-			data.ActiveListID = ""
+func ensureActiveRoadmap(data *GoalsData) bool {
+	if len(data.Roadmaps) == 0 {
+		if data.ActiveRoadmapID != "" {
+			data.ActiveRoadmapID = ""
 			return true
 		}
 		return false
 	}
-	for _, l := range data.Lists {
-		if l.ID == data.ActiveListID {
+	for _, l := range data.Roadmaps {
+		if l.ID == data.ActiveRoadmapID {
 			return false
 		}
 	}
 	// Active list missing or unset → fall back to first list.
-	data.ActiveListID = data.Lists[0].ID
+	data.ActiveRoadmapID = data.Roadmaps[0].ID
 	return true
 }
 
-// migrateOrphanListIDs assigns the active list's ID to any goal/sub-goal/task
-// that predates multi-list support and has an empty ListID. This is a
+// migrateOrphanRoadmapIDs assigns the active list's ID to any goal/sub-goal/task
+// that predates multi-list support and has an empty RoadmapID. This is a
 // one-shot, idempotent migration; once persisted, future reads are no-ops.
 // If there is no active list, nothing is migrated.
-func migrateOrphanListIDs(data *GoalsData) bool {
-	if data.ActiveListID == "" {
+func migrateOrphanRoadmapIDs(data *GoalsData) bool {
+	if data.ActiveRoadmapID == "" {
 		return false
 	}
 	mutated := false
 	for i := range data.MainGoals {
-		if data.MainGoals[i].ListID == "" {
-			data.MainGoals[i].ListID = data.ActiveListID
+		if data.MainGoals[i].RoadmapID == "" {
+			data.MainGoals[i].RoadmapID = data.ActiveRoadmapID
 			mutated = true
 		}
 	}
 	for i := range data.SubGoals {
-		if data.SubGoals[i].ListID == "" {
-			data.SubGoals[i].ListID = data.ActiveListID
+		if data.SubGoals[i].RoadmapID == "" {
+			data.SubGoals[i].RoadmapID = data.ActiveRoadmapID
 			mutated = true
 		}
 	}
 	for i := range data.Tasks {
-		if data.Tasks[i].ListID == "" {
-			data.Tasks[i].ListID = data.ActiveListID
+		if data.Tasks[i].RoadmapID == "" {
+			data.Tasks[i].RoadmapID = data.ActiveRoadmapID
 			mutated = true
 		}
 	}
 	return mutated
 }
 
-// requireActiveList errors out if no list exists. Use before any goal/task mutation.
-func requireActiveList(data GoalsData) {
-	if len(data.Lists) == 0 || data.ActiveListID == "" {
+// requireActiveRoadmap errors out if no list exists. Use before any goal/task mutation.
+func requireActiveRoadmap(data GoalsData) {
+	if len(data.Roadmaps) == 0 || data.ActiveRoadmapID == "" {
 		fmt.Fprintf(os.Stderr, "\n❌ No roadmaps exist yet.\n")
 		fmt.Fprintf(os.Stderr, "   Create one first:  og list-create <name>\n\n")
 		os.Exit(1)
 	}
 }
 
-// findList returns index of list matching id or name (case-insensitive), or -1.
-func findList(data GoalsData, idOrName string) int {
-	for i, l := range data.Lists {
+// findRoadmap returns index of list matching id or name (case-insensitive), or -1.
+func findRoadmap(data GoalsData, idOrName string) int {
+	for i, l := range data.Roadmaps {
 		if l.ID == idOrName {
 			return i
 		}
 	}
-	for i, l := range data.Lists {
+	for i, l := range data.Roadmaps {
 		if strings.EqualFold(l.Name, idOrName) {
 			return i
 		}
@@ -288,9 +288,9 @@ func findList(data GoalsData, idOrName string) int {
 	return -1
 }
 
-func activeListName(data GoalsData) string {
-	for _, l := range data.Lists {
-		if l.ID == data.ActiveListID {
+func activeRoadmapName(data GoalsData) string {
+	for _, l := range data.Roadmaps {
+		if l.ID == data.ActiveRoadmapID {
 			return l.Name
 		}
 	}
@@ -301,9 +301,9 @@ func activeListName(data GoalsData) string {
 // Generic per-list filter
 // ──────────────────────────────────────────────────────────────────
 
-// filterByList returns all items whose list_id equals listID.
+// filterByRoadmap returns all items whose list_id equals listID.
 // After migration, every item has a list_id, so no fallback is needed.
-func filterByList[T any](items []T, getListID func(T) string, listID string) []T {
+func filterByRoadmap[T any](items []T, getListID func(T) string, listID string) []T {
 	out := make([]T, 0, len(items))
 	for _, it := range items {
 		if getListID(it) == listID {
@@ -313,16 +313,16 @@ func filterByList[T any](items []T, getListID func(T) string, listID string) []T
 	return out
 }
 
-func goalsForList(data GoalsData, listID string) []MainGoal {
-	return filterByList(data.MainGoals, func(m MainGoal) string { return m.ListID }, listID)
+func goalsForRoadmap(data GoalsData, listID string) []MainGoal {
+	return filterByRoadmap(data.MainGoals, func(m MainGoal) string { return m.RoadmapID }, listID)
 }
 
-func subGoalsForList(data GoalsData, listID string) []SubGoal {
-	return filterByList(data.SubGoals, func(s SubGoal) string { return s.ListID }, listID)
+func subGoalsForRoadmap(data GoalsData, listID string) []SubGoal {
+	return filterByRoadmap(data.SubGoals, func(s SubGoal) string { return s.RoadmapID }, listID)
 }
 
-func tasksForList(data GoalsData, listID string) []Task {
-	return filterByList(data.Tasks, func(t Task) string { return t.ListID }, listID)
+func tasksForRoadmap(data GoalsData, listID string) []Task {
+	return filterByRoadmap(data.Tasks, func(t Task) string { return t.RoadmapID }, listID)
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -363,16 +363,16 @@ func today() string {
 
 func listGoals() {
 	data := readGoals()
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Println("\n📋 Current Goals")
 		printSeparator()
 		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
-	listID := data.ActiveListID
-	mainGoals := goalsForList(data, listID)
+	listID := data.ActiveRoadmapID
+	mainGoals := goalsForRoadmap(data, listID)
 
-	fmt.Printf("\n📋 Current Goals  [roadmap: %s]\n", activeListName(data))
+	fmt.Printf("\n📋 Current Goals  [roadmap: %s]\n", activeRoadmapName(data))
 	printSeparator()
 
 	if len(mainGoals) == 0 {
@@ -398,7 +398,7 @@ func listGoals() {
 			fmt.Printf("   Context: %s\n", strings.Join(mg.Context, ", "))
 		}
 
-		subs := subGoalsForList(data, listID)
+		subs := subGoalsForRoadmap(data, listID)
 		var children []SubGoal
 		for _, sg := range subs {
 			if sg.ParentID == mg.ID {
@@ -425,29 +425,29 @@ func listGoals() {
 
 func addMainGoal(title string, context []string) {
 	data := readGoals()
-	requireActiveList(data)
+	requireActiveRoadmap(data)
 
 	newGoal := MainGoal{
-		ID:       generateID("mg"),
-		ListID:   data.ActiveListID,
-		Title:    title,
-		Created:  time.Now(),
-		Status:   StatusInProgress,
-		Progress: 0,
-		SubGoals: []string{},
-		Context:  context,
+		ID:        generateID("mg"),
+		RoadmapID: data.ActiveRoadmapID,
+		Title:     title,
+		Created:   time.Now(),
+		Status:    StatusInProgress,
+		Progress:  0,
+		SubGoals:  []string{},
+		Context:   context,
 	}
 
 	data.MainGoals = append(data.MainGoals, newGoal)
 	writeGoals(data)
 
-	fmt.Printf("\n✅ Added main goal: %q  [roadmap: %s]\n", title, activeListName(data))
+	fmt.Printf("\n✅ Added main goal: %q  [roadmap: %s]\n", title, activeRoadmapName(data))
 	fmt.Printf("   ID: %s\n\n", newGoal.ID)
 }
 
 func addSubGoal(title, parentID string) {
 	data := readGoals()
-	requireActiveList(data)
+	requireActiveRoadmap(data)
 
 	parentIdx := -1
 	for i, mg := range data.MainGoals {
@@ -461,12 +461,12 @@ func addSubGoal(title, parentID string) {
 	}
 
 	newSubGoal := SubGoal{
-		ID:       generateID("sg"),
-		ListID:   data.MainGoals[parentIdx].ListID,
-		Title:    title,
-		ParentID: parentID,
-		Created:  time.Now(),
-		Status:   StatusPending,
+		ID:        generateID("sg"),
+		RoadmapID: data.MainGoals[parentIdx].RoadmapID,
+		Title:     title,
+		ParentID:  parentID,
+		Created:   time.Now(),
+		Status:    StatusPending,
 	}
 
 	data.SubGoals = append(data.SubGoals, newSubGoal)
@@ -533,17 +533,17 @@ func markDone(goalID string) {
 
 func generateSummary() {
 	data := readGoals()
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Println("\n📊 Daily Summary")
 		printSeparator()
 		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
-	listID := data.ActiveListID
+	listID := data.ActiveRoadmapID
 	todayStr := today()
 
-	listMains := goalsForList(data, listID)
-	listSubs := subGoalsForList(data, listID)
+	roadmapMains := goalsForRoadmap(data, listID)
+	listSubs := subGoalsForRoadmap(data, listID)
 
 	var completedToday []SubGoal
 	for _, sg := range listSubs {
@@ -553,7 +553,7 @@ func generateSummary() {
 	}
 
 	var addedToday []string
-	for _, mg := range listMains {
+	for _, mg := range roadmapMains {
 		if mg.Created.Format(dateFmtISO) == todayStr {
 			addedToday = append(addedToday, mg.Title)
 		}
@@ -565,14 +565,14 @@ func generateSummary() {
 	}
 
 	var inProgress []MainGoal
-	for _, mg := range listMains {
+	for _, mg := range roadmapMains {
 		if mg.Status == StatusInProgress {
 			inProgress = append(inProgress, mg)
 		}
 	}
 
 	fmt.Printf("\n📊 Daily Summary - %s  [roadmap: %s]\n",
-		time.Now().Format(dateFmtSummary), activeListName(data))
+		time.Now().Format(dateFmtSummary), activeRoadmapName(data))
 	printSeparator()
 
 	fmt.Printf("\n✅ Completed (%d goals):\n", len(completedToday))
@@ -634,30 +634,30 @@ func generateSummary() {
 
 func remindMe() {
 	data := readGoals()
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Println("\n🎯 Goal Reminder")
 		printSeparator()
 		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
-	listID := data.ActiveListID
+	listID := data.ActiveRoadmapID
 
 	var inProgress []MainGoal
-	for _, mg := range goalsForList(data, listID) {
+	for _, mg := range goalsForRoadmap(data, listID) {
 		if mg.Status == StatusInProgress {
 			inProgress = append(inProgress, mg)
 		}
 	}
 
 	var pendingSubGoals []SubGoal
-	subs := subGoalsForList(data, listID)
+	subs := subGoalsForRoadmap(data, listID)
 	for _, sg := range subs {
 		if sg.Status == StatusPending {
 			pendingSubGoals = append(pendingSubGoals, sg)
 		}
 	}
 
-	fmt.Printf("\n🎯 Goal Reminder  [roadmap: %s]\n", activeListName(data))
+	fmt.Printf("\n🎯 Goal Reminder  [roadmap: %s]\n", activeRoadmapName(data))
 	printSeparator()
 
 	if len(inProgress) == 0 {
@@ -689,16 +689,16 @@ func remindMe() {
 
 func listTasks() {
 	data := readGoals()
-	if len(data.Lists) == 0 {
-		fmt.Println("\n📝 Task List")
+	if len(data.Roadmaps) == 0 {
+		fmt.Println("\n📝 Task Roadmap")
 		printSeparator()
 		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
 		return
 	}
-	listID := data.ActiveListID
+	listID := data.ActiveRoadmapID
 
 	var pending, completed []Task
-	for _, t := range tasksForList(data, listID) {
+	for _, t := range tasksForRoadmap(data, listID) {
 		if t.Completed {
 			completed = append(completed, t)
 		} else {
@@ -706,7 +706,7 @@ func listTasks() {
 		}
 	}
 
-	fmt.Printf("\n📝 Task List  [roadmap: %s]\n", activeListName(data))
+	fmt.Printf("\n📝 Task Roadmap  [roadmap: %s]\n", activeRoadmapName(data))
 	printSeparator()
 
 	if len(pending) == 0 && len(completed) == 0 {
@@ -768,7 +768,7 @@ func listTasks() {
 func addTask(title, priority string, dependsOn []string) {
 	withLock(func() {
 		data := readGoals()
-		requireActiveList(data)
+		requireActiveRoadmap(data)
 
 		// Validate deps exist and aren't self-references.
 		for _, depID := range dependsOn {
@@ -779,7 +779,7 @@ func addTask(title, priority string, dependsOn []string) {
 
 		newTask := Task{
 			ID:        generateID("task"),
-			ListID:    data.ActiveListID,
+			RoadmapID: data.ActiveRoadmapID,
 			Title:     title,
 			Created:   time.Now(),
 			Priority:  priority,
@@ -789,8 +789,8 @@ func addTask(title, priority string, dependsOn []string) {
 		data.Tasks = append(data.Tasks, newTask)
 		writeGoals(data)
 		appendEvent(Event{
-			Event: EvTaskAdded,
-			TaskID: newTask.ID, ListID: newTask.ListID, Title: newTask.Title,
+			Event:  EvTaskAdded,
+			TaskID: newTask.ID, RoadmapID: newTask.RoadmapID, Title: newTask.Title,
 			Data: map[string]any{
 				"priority":   priority,
 				"depends_on": dependsOn,
@@ -822,11 +822,11 @@ func markTaskDone(taskID string) {
 				data.Tasks[i].Assignee = ""
 				data.Tasks[i].ClaimedAt = nil
 				completedTitle := data.Tasks[i].Title
-				completedListID := data.Tasks[i].ListID
+				completedListID := data.Tasks[i].RoadmapID
 				writeGoals(data)
 				appendEvent(Event{
 					Event:  EvTaskCompleted,
-					TaskID: taskID, ListID: completedListID,
+					TaskID: taskID, RoadmapID: completedListID,
 					Title: completedTitle,
 					Data:  map[string]any{"prev_assignee": prevAssignee},
 				})
@@ -849,7 +849,7 @@ func markTaskDone(taskID string) {
 					if len(blockedDeps(t, data.Tasks)) == 0 {
 						appendEvent(Event{
 							Event:  EvTaskUnblocked,
-							TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+							TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
 							Data: map[string]any{"unblocked_by": taskID},
 						})
 					}
@@ -868,12 +868,12 @@ func deleteTask(taskID string) {
 		for i := range data.Tasks {
 			if data.Tasks[i].ID == taskID {
 				title := data.Tasks[i].Title
-				listID := data.Tasks[i].ListID
+				listID := data.Tasks[i].RoadmapID
 				data.Tasks = append(data.Tasks[:i], data.Tasks[i+1:]...)
 				writeGoals(data)
 				appendEvent(Event{
 					Event:  EvTaskDeleted,
-					TaskID: taskID, ListID: listID, Title: title,
+					TaskID: taskID, RoadmapID: listID, Title: title,
 				})
 				fmt.Printf("\n🗑️  Deleted task: %q\n\n", title)
 				return
@@ -913,7 +913,7 @@ func clearCompletedTasks() {
 func showToday() {
 	data := readGoals()
 
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Println("\n╔════════════════════════════════════════════════╗")
 		fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format(dateFmtHeader))
 		fmt.Println("║  📍 No roadmaps yet")
@@ -925,21 +925,21 @@ func showToday() {
 		return
 	}
 
-	listID := data.ActiveListID
+	listID := data.ActiveRoadmapID
 	todayStr := today()
 
-	listMains := goalsForList(data, listID)
-	listSubs := subGoalsForList(data, listID)
-	listTasksAll := tasksForList(data, listID)
+	roadmapMains := goalsForRoadmap(data, listID)
+	listSubs := subGoalsForRoadmap(data, listID)
+	listTasksAll := tasksForRoadmap(data, listID)
 
 	fmt.Println("\n╔════════════════════════════════════════════════╗")
 	fmt.Printf("║  📅 TODAY - %s\n", time.Now().Format(dateFmtHeader))
-	fmt.Printf("║  📍 Roadmap: %s\n", activeListName(data))
+	fmt.Printf("║  📍 Roadmap: %s\n", activeRoadmapName(data))
 	fmt.Println("╚════════════════════════════════════════════════╝")
 
 	// Active Goals
 	var inProgress []MainGoal
-	for _, mg := range listMains {
+	for _, mg := range roadmapMains {
 		if mg.Status == StatusInProgress {
 			inProgress = append(inProgress, mg)
 		}
@@ -1083,29 +1083,29 @@ func printPriorityBucket(label string, tasks []Task) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// List operations
+// Roadmap operations
 // ──────────────────────────────────────────────────────────────────
 
-func listLists() {
+func listRoadmaps() {
 	data := readGoals()
 
 	fmt.Println("\n📍 Roadmaps")
 	printSeparator()
 
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Println("\n  No roadmaps yet.")
 		fmt.Printf("  Create your first roadmap:  og list-create <name>\n\n")
 		return
 	}
 
-	for _, l := range data.Lists {
+	for _, l := range data.Roadmaps {
 		marker := "  "
-		if l.ID == data.ActiveListID {
+		if l.ID == data.ActiveRoadmapID {
 			marker = "▶ "
 		}
-		mainCount := len(goalsForList(data, l.ID))
-		subCount := len(subGoalsForList(data, l.ID))
-		listTasksLocal := tasksForList(data, l.ID)
+		mainCount := len(goalsForRoadmap(data, l.ID))
+		subCount := len(subGoalsForRoadmap(data, l.ID))
+		listTasksLocal := tasksForRoadmap(data, l.ID)
 		taskCount := len(listTasksLocal)
 		pendingTasks := 0
 		for _, t := range listTasksLocal {
@@ -1121,25 +1121,25 @@ func listLists() {
 
 	fmt.Println()
 	printSeparator()
-	fmt.Printf("\nActive: %s\n\n", activeListName(data))
+	fmt.Printf("\nActive: %s\n\n", activeRoadmapName(data))
 }
 
 func listCreate(name string) {
 	data := readGoals()
 
-	for _, l := range data.Lists {
+	for _, l := range data.Roadmaps {
 		if strings.EqualFold(l.Name, name) {
 			die("Error: A roadmap named %q already exists.", name)
 		}
 	}
 
-	newList := List{
+	newList := Roadmap{
 		ID:      generateID("list"),
 		Name:    name,
 		Created: time.Now(),
 	}
-	data.Lists = append(data.Lists, newList)
-	data.ActiveListID = newList.ID
+	data.Roadmaps = append(data.Roadmaps, newList)
+	data.ActiveRoadmapID = newList.ID
 	writeGoals(data)
 
 	fmt.Printf("\n✅ Created roadmap: %q (now active)\n", name)
@@ -1148,46 +1148,46 @@ func listCreate(name string) {
 
 func listUse(idOrName string) {
 	data := readGoals()
-	idx := findList(data, idOrName)
+	idx := findRoadmap(data, idOrName)
 	if idx == -1 {
 		die("Error: Roadmap %q not found.", idOrName)
 	}
 
-	data.ActiveListID = data.Lists[idx].ID
+	data.ActiveRoadmapID = data.Roadmaps[idx].ID
 	writeGoals(data)
-	fmt.Printf("\n✅ Active roadmap: %s\n\n", data.Lists[idx].Name)
+	fmt.Printf("\n✅ Active roadmap: %s\n\n", data.Roadmaps[idx].Name)
 }
 
 func listRename(idOrName, newName string) {
 	data := readGoals()
-	idx := findList(data, idOrName)
+	idx := findRoadmap(data, idOrName)
 	if idx == -1 {
 		die("Error: Roadmap %q not found.", idOrName)
 	}
-	for i, l := range data.Lists {
+	for i, l := range data.Roadmaps {
 		if i != idx && strings.EqualFold(l.Name, newName) {
 			die("Error: A roadmap named %q already exists.", newName)
 		}
 	}
-	old := data.Lists[idx].Name
-	data.Lists[idx].Name = newName
+	old := data.Roadmaps[idx].Name
+	data.Roadmaps[idx].Name = newName
 	writeGoals(data)
 	fmt.Printf("\n✅ Renamed roadmap: %q → %q\n\n", old, newName)
 }
 
 func listDelete(idOrName string) {
 	data := readGoals()
-	idx := findList(data, idOrName)
+	idx := findRoadmap(data, idOrName)
 	if idx == -1 {
 		die("Error: Roadmap %q not found.", idOrName)
 	}
-	target := data.Lists[idx]
+	target := data.Roadmaps[idx]
 
 	// Drop everything belonging to this list. After migration, every item
-	// has a non-empty ListID, so equality is sufficient.
+	// has a non-empty RoadmapID, so equality is sufficient.
 	keepMains := data.MainGoals[:0]
 	for _, mg := range data.MainGoals {
-		if mg.ListID != target.ID {
+		if mg.RoadmapID != target.ID {
 			keepMains = append(keepMains, mg)
 		}
 	}
@@ -1195,7 +1195,7 @@ func listDelete(idOrName string) {
 
 	keepSubs := data.SubGoals[:0]
 	for _, sg := range data.SubGoals {
-		if sg.ListID != target.ID {
+		if sg.RoadmapID != target.ID {
 			keepSubs = append(keepSubs, sg)
 		}
 	}
@@ -1203,49 +1203,49 @@ func listDelete(idOrName string) {
 
 	keepTasks := data.Tasks[:0]
 	for _, t := range data.Tasks {
-		if t.ListID != target.ID {
+		if t.RoadmapID != target.ID {
 			keepTasks = append(keepTasks, t)
 		}
 	}
 	data.Tasks = append([]Task{}, keepTasks...)
 
-	data.Lists = append(data.Lists[:idx], data.Lists[idx+1:]...)
+	data.Roadmaps = append(data.Roadmaps[:idx], data.Roadmaps[idx+1:]...)
 
-	if data.ActiveListID == target.ID {
-		if len(data.Lists) > 0 {
-			data.ActiveListID = data.Lists[0].ID
+	if data.ActiveRoadmapID == target.ID {
+		if len(data.Roadmaps) > 0 {
+			data.ActiveRoadmapID = data.Roadmaps[0].ID
 		} else {
-			data.ActiveListID = ""
+			data.ActiveRoadmapID = ""
 		}
 	}
 
 	writeGoals(data)
 	fmt.Printf("\n🗑️  Deleted roadmap: %q (and its goals/tasks)\n", target.Name)
-	if len(data.Lists) == 0 {
+	if len(data.Roadmaps) == 0 {
 		fmt.Printf("   No roadmaps remaining. Create one with:  og list-create <name>\n\n")
 	} else {
-		fmt.Printf("   Active roadmap is now: %s\n\n", activeListName(data))
+		fmt.Printf("   Active roadmap is now: %s\n\n", activeRoadmapName(data))
 	}
 }
 
 func listShow(idOrName string) {
 	data := readGoals()
-	idx := findList(data, idOrName)
+	idx := findRoadmap(data, idOrName)
 	if idx == -1 {
 		die("Error: Roadmap %q not found.", idOrName)
 	}
-	target := data.Lists[idx]
+	target := data.Roadmaps[idx]
 
 	fmt.Printf("\n📍 Roadmap: %s", target.Name)
-	if target.ID == data.ActiveListID {
+	if target.ID == data.ActiveRoadmapID {
 		fmt.Print("  (active)")
 	}
 	fmt.Println()
 	printSeparator()
 
-	mains := goalsForList(data, target.ID)
-	subs := subGoalsForList(data, target.ID)
-	tasks := tasksForList(data, target.ID)
+	mains := goalsForRoadmap(data, target.ID)
+	subs := subGoalsForRoadmap(data, target.ID)
+	tasks := tasksForRoadmap(data, target.ID)
 
 	fmt.Println("\n🎯 Goals:")
 	if len(mains) == 0 {
@@ -1307,7 +1307,7 @@ func printUsage(toStderr bool) {
 Usage: og <command> [args]
 
 Goals:
-  list                              List goals in active roadmap
+  list                              Roadmap goals in active roadmap
   add-main <title>                  Add a main goal
   add-sub <parent-id> <title>       Add a sub-goal under <parent-id>
   done <id>                         Mark goal as complete
@@ -1315,7 +1315,7 @@ Goals:
   remind                            Show reminder
 
 Tasks:
-  task-list                         List tasks in active roadmap
+  task-list                         Roadmap tasks in active roadmap
   task-add <title> [priority] [--depends id1,id2]
                                     Add a task (priority: high|medium|low)
   task-show <id>                    Show one task with deps + claim status
@@ -1354,7 +1354,7 @@ Inside OpenCode, prefer the slash commands:
   /og   /ogl   /ogc <name>          Roadmaps: browse, list, create
   /ogs <name>   /ogd [name]         Roadmaps: switch, delete
   /og-main   /og-sub          Add main / sub-goals
-  /og-list   /og-done         List goals, mark complete
+  /og-list   /og-done         Roadmap goals, mark complete
   /og-summary   /og-remind    Daily summary, reminder
   /task-add   /task-list            Tasks: add, list
   /task-done   /task-delete         Tasks: complete, delete
@@ -1512,7 +1512,7 @@ func main() {
 		showToday()
 
 	case "list-ls":
-		listLists()
+		listRoadmaps()
 
 	case "list-create":
 		requireArg(args, "a list name")

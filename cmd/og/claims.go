@@ -182,7 +182,7 @@ func claimTask(taskID string) {
 		if blocked := blockedDeps(*t, data.Tasks); len(blocked) > 0 {
 			appendEvent(Event{
 				Actor: me, Event: EvClaimRefused,
-				TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+				TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
 				Data: map[string]any{"reason": "blocked", "blocked_by": blocked},
 			})
 			fmt.Fprintf(os.Stderr, "\n❌ Task is blocked by unfinished dependencies:\n")
@@ -196,7 +196,7 @@ func claimTask(taskID string) {
 			age := time.Since(*t.ClaimedAt)
 			appendEvent(Event{
 				Actor: me, Event: EvClaimRefused,
-				TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+				TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
 				Data: map[string]any{"reason": "already_claimed", "holder": t.Assignee, "age": age.String()},
 			})
 			die("Task is already claimed by %s (%s ago, TTL %s). Wait or override after expiry.",
@@ -209,7 +209,7 @@ func claimTask(taskID string) {
 		writeGoals(data)
 		appendEvent(Event{
 			Actor: me, Event: EvTaskClaimed,
-			TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+			TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
 		})
 
 		fmt.Printf("\n🔒 Claimed task: %q\n", t.Title)
@@ -253,7 +253,7 @@ func releaseTask(taskID string) {
 		writeGoals(data)
 		appendEvent(Event{
 			Actor: me, Event: EvTaskReleased,
-			TaskID: t.ID, ListID: t.ListID, Title: t.Title,
+			TaskID: t.ID, RoadmapID: t.RoadmapID, Title: t.Title,
 			Data: map[string]any{"prev_holder": prev},
 		})
 
@@ -271,13 +271,13 @@ func releaseTask(taskID string) {
 func nextTask(autoClaim bool) {
 	withLock(func() {
 		data := readGoals()
-		requireActiveList(data)
+		requireActiveRoadmap(data)
 		ttl := claimTTL()
 		me := agentID()
 
 		candidates := []int{}
 		for i, t := range data.Tasks {
-			if t.ListID != data.ActiveListID {
+			if t.RoadmapID != data.ActiveRoadmapID {
 				continue
 			}
 			if t.Completed {
@@ -293,7 +293,7 @@ func nextTask(autoClaim bool) {
 		}
 
 		if len(candidates) == 0 {
-			fmt.Fprintln(os.Stderr, "\nℹ️  No actionable tasks (all completed, claimed, or list empty).")
+			fmt.Fprintln(os.Stderr, "\nℹ️  No actionable tasks (all completed, claimed, or roadmap empty).")
 			os.Exit(1)
 		}
 
@@ -327,7 +327,7 @@ func nextTask(autoClaim bool) {
 			writeGoals(data)
 			appendEvent(Event{
 				Actor: me, Event: EvTaskClaimed,
-				TaskID: pick.ID, ListID: pick.ListID, Title: pick.Title,
+				TaskID: pick.ID, RoadmapID: pick.RoadmapID, Title: pick.Title,
 				Data: map[string]any{"via": "task-next"},
 			})
 			fmt.Printf("\n🔒 Claimed next task: %q\n", pick.Title)
@@ -363,7 +363,7 @@ func showTask(taskID string) {
 
 	fmt.Printf("\n📋 Task: %s\n", t.Title)
 	fmt.Printf("   ID: %s\n", t.ID)
-	fmt.Printf("   List: %s\n", t.ListID)
+	fmt.Printf("   Roadmap: %s\n", t.RoadmapID)
 	fmt.Printf("   Created: %s\n", t.Created.Format("2006-01-02 15:04"))
 
 	switch {
