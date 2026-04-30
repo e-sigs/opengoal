@@ -18,9 +18,9 @@ func tasksForRoadmap(data GoalsData, listID string) []Task {
 func listTasks() {
 	data := readGoals()
 	if len(data.Roadmaps) == 0 {
-		fmt.Println("\n📝 Task Roadmap")
+		fmt.Printf("\n%s\n", cTitle("📝 Task Roadmap"))
 		printSeparator()
-		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
+		fmt.Printf("\n  %s\n\n", cComment("No roadmaps yet. Create one with:  og list-create <name>"))
 		return
 	}
 	listID := data.ActiveRoadmapID
@@ -34,57 +34,65 @@ func listTasks() {
 		}
 	}
 
-	fmt.Printf("\n📝 Task Roadmap  [roadmap: %s]\n", activeRoadmapName(data))
+	fmt.Printf("\n%s  %s\n", cTitle("📝 Task Roadmap"), cCaption(fmt.Sprintf("[roadmap: %s]", activeRoadmapName(data))))
 	printSeparator()
 
 	if len(pending) == 0 && len(completed) == 0 {
-		fmt.Printf("\nNo tasks yet! Use /task-add to add your first task.\n\n")
+		fmt.Printf("\n%s\n\n", cComment("No tasks yet! Use /task-add to add your first task."))
 		return
 	}
 
 	if len(pending) > 0 {
 		ttl := claimTTL()
-		fmt.Printf("\n⏳ Pending (%d):\n", len(pending))
+		fmt.Printf("\n%s\n", cHeading(fmt.Sprintf("⏳ Pending (%d):", len(pending))))
 		for i, task := range pending {
 			priority := ""
 			if task.Priority != "" {
-				priority = fmt.Sprintf(" [%s]", task.Priority)
+				priority = " " + cCaption(fmt.Sprintf("[%s]", task.Priority))
 			}
 
 			// Status marker: blocked > claimed > stale > ready.
-			marker := "○"
+			marker := cCaption("○")
 			suffix := ""
-			if blocked := blockedDeps(task, data.Tasks); len(blocked) > 0 {
-				marker = "⏸"
-				suffix = fmt.Sprintf(" — blocked by %d dep%s", len(blocked), plural(len(blocked)))
-			} else if claimActive(task, ttl) {
-				marker = "🔒"
-				suffix = fmt.Sprintf(" — %s (%s ago)", task.Assignee, formatAge(time.Since(*task.ClaimedAt)))
-			} else if task.Assignee != "" && task.ClaimedAt != nil {
-				marker = "⚠"
-				suffix = fmt.Sprintf(" — stale claim by %s", task.Assignee)
+			switch {
+			case len(blockedDeps(task, data.Tasks)) > 0:
+				blocked := blockedDeps(task, data.Tasks)
+				marker = cWarn("⏸")
+				suffix = cCaption(fmt.Sprintf(" — blocked by %d dep%s", len(blocked), plural(len(blocked))))
+			case claimActive(task, ttl):
+				marker = cInfo("🔒")
+				suffix = cCaption(fmt.Sprintf(" — %s (%s ago)", task.Assignee, formatAge(time.Since(*task.ClaimedAt))))
+			case task.Assignee != "" && task.ClaimedAt != nil:
+				marker = cDanger("⚠")
+				suffix = cWarn(fmt.Sprintf(" — stale claim by %s", task.Assignee))
 			}
 
-			fmt.Printf("  %d. %s %s%s%s\n", i+1, marker, task.Title, priority, suffix)
-			fmt.Printf("     ID: %s | Created: %s\n", task.ID, task.Created.Format(dateFmtDisplay))
+			fmt.Printf("  %s %s %s%s%s\n",
+				cCaption(fmt.Sprintf("%d.", i+1)),
+				marker,
+				cPriority(task.Priority, task.Title),
+				priority,
+				suffix,
+			)
+			fmt.Printf("     %s\n", cCaption(fmt.Sprintf("ID: %s | Created: %s", task.ID, task.Created.Format(dateFmtDisplay))))
 		}
 	}
 
 	if len(completed) > 0 {
-		fmt.Printf("\n✅ Completed (%d):\n", len(completed))
+		fmt.Printf("\n%s\n", cHeading(fmt.Sprintf("✅ Completed (%d):", len(completed))))
 		limit := completedShowMax
 		if len(completed) < limit {
 			limit = len(completed)
 		}
 		for i := 0; i < limit; i++ {
 			task := completed[i]
-			fmt.Printf("  ✓ %s\n", task.Title)
+			fmt.Printf("  %s %s\n", cSuccess("✓"), cDim(task.Title))
 			if task.CompletedAt != nil {
-				fmt.Printf("     Completed: %s\n", task.CompletedAt.Format(dateFmtDisplay))
+				fmt.Printf("     %s\n", cCaption(fmt.Sprintf("Completed: %s", task.CompletedAt.Format(dateFmtDisplay))))
 			}
 		}
 		if len(completed) > limit {
-			fmt.Printf("  ... and %d more\n", len(completed)-limit)
+			fmt.Printf("  %s\n", cComment(fmt.Sprintf("... and %d more", len(completed)-limit)))
 		}
 	}
 

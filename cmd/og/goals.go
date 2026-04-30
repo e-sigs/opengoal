@@ -48,19 +48,19 @@ func calculateProgress(mainGoalID string, data GoalsData) int {
 func listGoals() {
 	data := readGoals()
 	if len(data.Roadmaps) == 0 {
-		fmt.Println("\n📋 Current Goals")
+		fmt.Printf("\n%s\n", cTitle("📋 Current Goals"))
 		printSeparator()
-		fmt.Printf("\n  No roadmaps yet. Create one with:  og list-create <name>\n\n")
+		fmt.Printf("\n  %s\n\n", cComment("No roadmaps yet. Create one with:  og list-create <name>"))
 		return
 	}
 	listID := data.ActiveRoadmapID
 	mainGoals := goalsForRoadmap(data, listID)
 
-	fmt.Printf("\n📋 Current Goals  [roadmap: %s]\n", activeRoadmapName(data))
+	fmt.Printf("\n%s  %s\n", cTitle("📋 Current Goals"), cCaption(fmt.Sprintf("[roadmap: %s]", activeRoadmapName(data))))
 	printSeparator()
 
 	if len(mainGoals) == 0 {
-		fmt.Printf("\nNo goals yet! Use /og-main to add your first goal.\n\n")
+		fmt.Printf("\n%s\n\n", cComment("No goals yet! Use /og-main to add your first goal."))
 		return
 	}
 
@@ -68,18 +68,21 @@ func listGoals() {
 		progress := calculateProgress(mg.ID, data)
 
 		statusIcon := "⏸️"
+		statusColor := cCaption
 		switch mg.Status {
 		case StatusCompleted:
 			statusIcon = "✅"
+			statusColor = cSuccess
 		case StatusInProgress:
 			statusIcon = "🔄"
+			statusColor = cInfo
 		}
 
-		fmt.Printf("\n%s %s\n", statusIcon, mg.Title)
-		fmt.Printf("   ID: %s | Progress: %d%% | Status: %s\n", mg.ID, progress, mg.Status)
+		fmt.Printf("\n%s %s\n", statusIcon, cBold(mg.Title))
+		fmt.Printf("   %s\n", cCaption(fmt.Sprintf("ID: %s | Progress: %d%% | Status: %s", mg.ID, progress, statusColor(mg.Status))))
 
 		if len(mg.Context) > 0 {
-			fmt.Printf("   Context: %s\n", strings.Join(mg.Context, ", "))
+			fmt.Printf("   %s %s\n", cCaption("Context:"), cDim(strings.Join(mg.Context, ", ")))
 		}
 
 		subs := subGoalsForRoadmap(data, listID)
@@ -91,13 +94,15 @@ func listGoals() {
 		}
 
 		if len(children) > 0 {
-			fmt.Println("   Sub-goals:")
+			fmt.Printf("   %s\n", cBold("Sub-goals:"))
 			for _, sg := range children {
-				icon := "○"
+				icon := cCaption("○")
+				title := cSubtitle(sg.Title)
 				if sg.Status == StatusCompleted {
-					icon = "✓"
+					icon = cSuccess("✓")
+					title = cDim(sg.Title)
 				}
-				fmt.Printf("     %s %s (%s)\n", icon, sg.Title, sg.Status)
+				fmt.Printf("     • %s %s %s\n", icon, title, cCaption(fmt.Sprintf("(%s)", sg.Status)))
 			}
 		}
 	}
