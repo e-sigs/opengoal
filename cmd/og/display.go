@@ -1,11 +1,10 @@
 package main
 
 // The "today" dashboard — combined view of goals, tasks, and focus
-// suggestions for the active roadmap.
+// suggestions for the active roadmap, rendered as bordered cards.
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -13,14 +12,12 @@ func showToday() {
 	data := readGoals()
 
 	if len(data.Roadmaps) == 0 {
-		fmt.Println("\n╔════════════════════════════════════════════════╗")
-		fmt.Printf("║  %s\n", cTitle(fmt.Sprintf("📅 TODAY - %s", time.Now().Format(dateFmtHeader))))
-		fmt.Printf("║  %s\n", cCaption("📍 No roadmaps yet"))
-		fmt.Println("╚════════════════════════════════════════════════╝")
-		fmt.Println("\nYou have no roadmaps yet.")
-		fmt.Println("Create your first one with:")
-		fmt.Println(cComment("  og list-create <name>"))
-		fmt.Printf("\n%s\n\n", cComment("Or use /og to manage roadmaps interactively."))
+		fmt.Println()
+		fmt.Println(boxTop(cTitle("📅 " + time.Now().Format(dateFmtHeader))))
+		fmt.Println(boxLine(cCaption("No roadmaps yet."), 0))
+		fmt.Println(boxLine(cComment("Create one: og list-create <name>"), 0))
+		fmt.Println(boxBottom())
+		fmt.Println()
 		return
 	}
 
@@ -31,12 +28,14 @@ func showToday() {
 	listSubs := subGoalsForRoadmap(data, listID)
 	listTasksAll := tasksForRoadmap(data, listID)
 
-	fmt.Println("\n╔════════════════════════════════════════════════╗")
-	fmt.Printf("║  %s\n", cTitle(fmt.Sprintf("📅 TODAY - %s", time.Now().Format(dateFmtHeader))))
-	fmt.Printf("║  %s\n", cCaption(fmt.Sprintf("📍 Roadmap: %s", activeRoadmapName(data))))
-	fmt.Println("╚════════════════════════════════════════════════╝")
+	// Header card.
+	fmt.Println()
+	header := cTitle("📅 "+time.Now().Format(dateFmtHeader)) +
+		"  " + cCaption("· "+activeRoadmapName(data))
+	fmt.Println(boxTop(header))
+	fmt.Println(boxBottom())
 
-	// Active Goals
+	// Goals card.
 	var inProgress []MainGoal
 	for _, mg := range roadmapMains {
 		if mg.Status == StatusInProgress {
@@ -44,29 +43,40 @@ func showToday() {
 		}
 	}
 
-	fmt.Printf("\n%s\n", cHeading("🎯 ACTIVE GOALS"))
-	printSeparator()
-
+	fmt.Println()
+	fmt.Println(boxTop(cHeading("🎯 Goals")))
 	if len(inProgress) > 0 {
-		for _, mg := range inProgress {
+		for i, mg := range inProgress {
 			progress := calculateProgress(mg.ID, data)
 			var nextSubGoal *SubGoal
-			for i := range listSubs {
-				if listSubs[i].ParentID == mg.ID && listSubs[i].Status == StatusPending {
-					nextSubGoal = &listSubs[i]
+			for j := range listSubs {
+				if listSubs[j].ParentID == mg.ID && listSubs[j].Status == StatusPending {
+					nextSubGoal = &listSubs[j]
 					break
 				}
 			}
-			fmt.Printf("\n  • %s %s\n", cBold(mg.Title), cCaption(fmt.Sprintf("[%d%%]", progress)))
+			// Title line: "  0%  Title"
+			title := fmt.Sprintf("%s  %s",
+				cCaption(fmt.Sprintf("%3d%%", progress)),
+				cBold(mg.Title))
+			fmt.Println(boxLine(title, 0))
+			// Next line, indented under the title.
 			if nextSubGoal != nil {
-				fmt.Printf("      %s %s\n", cCaption("→ Next:"), cSubtitle(nextSubGoal.Title))
+				next := "         " + cCaption("→ ") + cSubtitle(nextSubGoal.Title)
+				fmt.Println(boxLine(next, 0))
+			} else {
+				fmt.Println(boxLine("         "+cComment("(no pending sub-goals)"), 0))
+			}
+			if i < len(inProgress)-1 {
+				fmt.Println(boxBlank())
 			}
 		}
 	} else {
-		fmt.Printf("\n  %s\n", cComment("No active goals. Use /og-main to add one!"))
+		fmt.Println(boxLine(cComment("none — /og-main <title>"), 0))
 	}
+	fmt.Println(boxBottom())
 
-	// Pending Tasks (bucketed by priority)
+	// Tasks card.
 	var pending, highPriority, mediumPriority, otherTasks []Task
 	for _, t := range listTasksAll {
 		if t.Completed {
@@ -83,18 +93,24 @@ func showToday() {
 		}
 	}
 
-	fmt.Printf("\n\n%s\n", cHeading("📝 TASKS"))
-	printSeparator()
-
+	fmt.Println()
+	fmt.Println(boxTop(cHeading("📝 Tasks")))
 	if len(pending) > 0 {
-		printPriorityBucket("🔴 HIGH PRIORITY", PriorityHigh, highPriority)
-		printPriorityBucket("🟡 MEDIUM PRIORITY", PriorityMedium, mediumPriority)
-		printPriorityBucket("⚪ OTHER", "", otherTasks)
+		printTaskBucket("🔴 high", PriorityHigh, highPriority)
+		if len(highPriority) > 0 && (len(mediumPriority) > 0 || len(otherTasks) > 0) {
+			fmt.Println(boxBlank())
+		}
+		printTaskBucket("🟡 medium", PriorityMedium, mediumPriority)
+		if len(mediumPriority) > 0 && len(otherTasks) > 0 {
+			fmt.Println(boxBlank())
+		}
+		printTaskBucket("⚪ other", "", otherTasks)
 	} else {
-		fmt.Printf("\n  %s\n", cComment("No pending tasks. Use /task-add to add one!"))
+		fmt.Println(boxLine(cComment("none — /task-add <title>"), 0))
 	}
+	fmt.Println(boxBottom())
 
-	// Completed Today
+	// Done-today card (only if any).
 	var completedToday []SubGoal
 	for _, sg := range listSubs {
 		if sg.CompletedAt != nil && sg.CompletedAt.Format(dateFmtISO) == todayStr {
@@ -107,76 +123,77 @@ func showToday() {
 			tasksCompletedToday = append(tasksCompletedToday, t)
 		}
 	}
-
-	fmt.Printf("\n\n%s\n", cHeading("✅ COMPLETED TODAY"))
-	printSeparator()
-
-	if len(completedToday) > 0 || len(tasksCompletedToday) > 0 {
-		if len(completedToday) > 0 {
-			fmt.Printf("\n%s\n", cBold("Goals:"))
-			for _, sg := range completedToday {
-				fmt.Printf("  %s %s\n", cSuccess("✓"), cDim(sg.Title))
-			}
+	if len(completedToday)+len(tasksCompletedToday) > 0 {
+		fmt.Println()
+		fmt.Println(boxTop(cHeading("✅ Done today")))
+		for _, sg := range completedToday {
+			fmt.Println(boxLine("  "+cSuccess("✓")+" "+cDim(sg.Title), 0))
 		}
-		if len(tasksCompletedToday) > 0 {
-			fmt.Printf("\n%s\n", cBold("Tasks:"))
-			for _, t := range tasksCompletedToday {
-				fmt.Printf("  %s %s\n", cSuccess("✓"), cDim(t.Title))
-			}
+		for _, t := range tasksCompletedToday {
+			fmt.Println(boxLine("  "+cSuccess("✓")+" "+cDim(t.Title), 0))
 		}
-	} else {
-		fmt.Printf("\n  %s\n", cComment("Nothing completed yet today. Let's get started!"))
+		fmt.Println(boxBottom())
 	}
 
-	// Focus
-	fmt.Printf("\n\n%s\n", cHeading("🔥 FOCUS NOW"))
-	printSeparator()
-
-	focusCount := 0
+	// Focus card.
+	type focusItem struct {
+		marker string
+		title  string
+		hint   string
+	}
+	var focus []focusItem
 	if len(highPriority) > 0 {
-		fmt.Printf("\n  • %s %s\n", cDanger(highPriority[0].Title), cCaption("(high priority task)"))
-		focusCount++
+		focus = append(focus, focusItem{cDanger("●"), cDanger(highPriority[0].Title), "high priority task"})
 	}
 	if len(inProgress) > 0 {
 		topGoal := inProgress[0]
 		for _, sg := range listSubs {
 			if sg.ParentID == topGoal.ID && sg.Status == StatusPending {
-				fmt.Printf("  • %s %s\n", cSubtitle(sg.Title), cCaption(fmt.Sprintf("(%s)", topGoal.Title)))
-				focusCount++
+				focus = append(focus, focusItem{cInfo("●"), cSubtitle(sg.Title), topGoal.Title})
 				break
 			}
 		}
 	}
-	if len(highPriority) > 1 && focusCount < focusListLimit {
-		fmt.Printf("  • %s %s\n", cDanger(highPriority[1].Title), cCaption("(high priority task)"))
-		focusCount++
+	if len(highPriority) > 1 && len(focus) < focusListLimit {
+		focus = append(focus, focusItem{cDanger("●"), cDanger(highPriority[1].Title), "high priority task"})
 	}
-	if len(mediumPriority) > 0 && focusCount < focusListLimit {
-		fmt.Printf("  • %s %s\n", cWarn(mediumPriority[0].Title), cCaption("(medium priority task)"))
-		focusCount++
-	}
-	if focusCount == 0 {
-		fmt.Printf("\n  %s\n", cComment("Add some goals or tasks to get started!"))
-		fmt.Printf("  %s\n", cComment("• /og-main <title> - Add a main goal"))
-		fmt.Printf("  %s\n", cComment("• /task-add <title> - Add a quick task"))
+	if len(mediumPriority) > 0 && len(focus) < focusListLimit {
+		focus = append(focus, focusItem{cWarn("●"), cWarn(mediumPriority[0].Title), "medium priority task"})
 	}
 
-	// Stats
-	fmt.Printf("\n\n%s\n", cHeading("📊 STATS"))
-	printSeparator()
-	fmt.Printf("  %s %s\n", cCaption("Active Goals:"), cBold(fmt.Sprintf("%d", len(inProgress))))
-	fmt.Printf("  %s %s\n", cCaption("Pending Tasks:"), cBold(fmt.Sprintf("%d", len(pending))))
-	fmt.Printf("  %s %s\n\n", cCaption("Completed Today:"), cBold(fmt.Sprintf("%d", len(completedToday)+len(tasksCompletedToday))))
+	fmt.Println()
+	fmt.Println(boxTop(cHeading("🔥 Focus")))
+	if len(focus) > 0 {
+		for i, f := range focus {
+			fmt.Println(boxLine("  "+f.marker+" "+f.title, 0))
+			fmt.Println(boxLine("    "+cCaption("· "+f.hint), 0))
+			if i < len(focus)-1 {
+				fmt.Println(boxBlank())
+			}
+		}
+	} else {
+		fmt.Println(boxLine(cComment("add a goal or task to get started"), 0))
+	}
+	fmt.Println(boxBottom())
 
-	fmt.Printf("%s\n\n", strings.Repeat("═", separatorWidth))
+	// Stats footer.
+	stats := fmt.Sprintf("%s active goals  ·  %s pending tasks  ·  %s done today",
+		cBold(fmt.Sprintf("%d", len(inProgress))),
+		cBold(fmt.Sprintf("%d", len(pending))),
+		cBold(fmt.Sprintf("%d", len(completedToday)+len(tasksCompletedToday))))
+	fmt.Println()
+	fmt.Println("  " + stats)
+	fmt.Println()
 }
 
-func printPriorityBucket(label, priority string, tasks []Task) {
+// printTaskBucket prints each task on its own bordered line. Empty buckets
+// produce no output.
+func printTaskBucket(label, priority string, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
-	fmt.Printf("\n%s:\n", cBold(label))
+	fmt.Println(boxLine(cBold(label), 0))
 	for _, t := range tasks {
-		fmt.Printf("  • %s\n", cPriority(priority, t.Title))
+		fmt.Println(boxLine("  • "+cPriority(priority, t.Title), 0))
 	}
 }

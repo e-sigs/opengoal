@@ -1,10 +1,10 @@
 ---
-description: List all opengoal roadmaps
+description: Show the active opengoal roadmap
 agent: general
 subtask: false
 ---
 
-All roadmaps:
-!`og list-all`
+Active roadmap:
+!`og list`
 
 Do not add any commentary or repeat the output above. The user has already seen it.

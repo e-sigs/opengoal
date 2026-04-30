@@ -305,25 +305,45 @@ func listDeleteBulk(idsOrNames []string, yes bool) {
 func listAll() {
 	data := readGoals()
 
-	if plainTextOn() {
-		listAllPlain(data)
-		return
-	}
-
-	fmt.Println(cTitle("📍 All Roadmaps"))
+	fmt.Println()
+	fmt.Println(boxTop(cTitle("📍 All Roadmaps")))
+	fmt.Println(boxBottom())
 
 	if len(data.Roadmaps) == 0 {
-		fmt.Println(cComment("  No roadmaps yet. Create one: og list-create <name>"))
+		fmt.Println()
+		fmt.Println(boxLine(cComment("No roadmaps yet — og list-create <name>"), 0))
+		fmt.Println(boxBottom())
+		fmt.Println()
 		return
 	}
 
-	for i, l := range data.Roadmaps {
+	// Summary card: one line per roadmap with active marker + counts.
+	fmt.Println()
+	fmt.Println(boxTop(cHeading("📇 Roadmaps") + "  " +
+		cCaption(fmt.Sprintf("· %d total", len(data.Roadmaps)))))
+	for _, l := range data.Roadmaps {
+		mains := goalsForRoadmap(data, l.ID)
+		subs := subGoalsForRoadmap(data, l.ID)
+		tasks := tasksForRoadmap(data, l.ID)
+		pending := 0
+		for _, t := range tasks {
+			if !t.Completed {
+				pending++
+			}
+		}
 		marker := "  "
 		nameStr := cBold(l.Name)
 		if l.ID == data.ActiveRoadmapID {
 			marker = cSuccess("▶ ")
 			nameStr = cSuccess(cBold(l.Name))
 		}
+		counts := cCaption(fmt.Sprintf("(%dg/%ds/%dt %dp)",
+			len(mains), len(subs), len(tasks), pending))
+		fmt.Println(boxLine(marker+nameStr+"  "+counts, 0))
+	}
+	fmt.Println(boxBottom())
+
+	for _, l := range data.Roadmaps {
 		mains := goalsForRoadmap(data, l.ID)
 		subs := subGoalsForRoadmap(data, l.ID)
 		tasks := tasksForRoadmap(data, l.ID)
@@ -334,19 +354,28 @@ func listAll() {
 			}
 		}
 
-		if i > 0 {
-			fmt.Println()
+		marker := "  "
+		nameStr := cBold(l.Name)
+		if l.ID == data.ActiveRoadmapID {
+			marker = cSuccess("▶ ")
+			nameStr = cSuccess(cBold(l.Name))
 		}
-		fmt.Printf("%s%s  %s\n", marker, nameStr,
-			cCaption(fmt.Sprintf("(%dg/%ds/%dt %dp)", len(mains), len(subs), len(tasks), pendingTasks)))
-		fmt.Printf("  %s %s\n", cCaption("ID:"), cCaption(l.ID))
+		stats := cCaption(fmt.Sprintf("(%dg/%ds/%dt %dp)",
+			len(mains), len(subs), len(tasks), pendingTasks))
+
+		fmt.Println()
+		fmt.Println(boxTop(marker + nameStr + "  " + stats))
+		fmt.Println(boxLine(cCaption("ID: ")+cDim(l.ID), 0))
 
 		if len(mains) == 0 {
-			fmt.Println(cComment("  (no goals)"))
+			fmt.Println(boxLine(cComment("(no goals)"), 0))
+			fmt.Println(boxBottom())
 			continue
 		}
+
+		fmt.Println(boxBlank())
 		for _, mg := range mains {
-			statusIcon := "⏸️"
+			statusIcon := "⏸"
 			titleStr := mg.Title
 			switch mg.Status {
 			case StatusCompleted:
@@ -356,85 +385,26 @@ func listAll() {
 				statusIcon = "🔄"
 				titleStr = cWarn(mg.Title)
 			}
-			fmt.Printf("  %s %s %s\n", statusIcon, titleStr,
-				cCaption(fmt.Sprintf("[%d%%]", calculateProgress(mg.ID, data))))
+			line := statusIcon + " " + titleStr + "  " +
+				cCaption(fmt.Sprintf("[%d%%]", calculateProgress(mg.ID, data)))
+			fmt.Println(boxLine(line, 0))
+
 			for _, sg := range subs {
 				if sg.ParentID == mg.ID {
-					icon := "○"
-					sgTitle := sg.Title
+					icon := cCaption("○")
+					sgTitle := cSubtitle(sg.Title)
 					if sg.Status == StatusCompleted {
 						icon = cSuccess("✓")
 						sgTitle = cDim(sg.Title)
 					}
-					fmt.Printf("      %s %s\n", icon, sgTitle)
+					fmt.Println(boxLine("    "+icon+" "+sgTitle, 0))
 				}
 			}
 		}
+		fmt.Println(boxBottom())
 	}
 
-	fmt.Printf("\n%s %s\n", cCaption("Active:"), cBold(activeRoadmapName(data)))
-}
-
-// listAllPlain renders listAll for OpenCode's chat UI as plain text.
-// OpenCode shows shell-command output verbatim, so we rely on indentation
-// and emoji for visual hierarchy rather than ANSI or markdown markers.
-func listAllPlain(data GoalsData) {
-	fmt.Println("📍 All Roadmaps")
-	fmt.Println()
-
-	if len(data.Roadmaps) == 0 {
-		fmt.Println("  No roadmaps yet. Create one: og list-create <name>")
-		return
-	}
-
-	for i, l := range data.Roadmaps {
-		mains := goalsForRoadmap(data, l.ID)
-		subs := subGoalsForRoadmap(data, l.ID)
-		tasks := tasksForRoadmap(data, l.ID)
-		pendingTasks := 0
-		for _, t := range tasks {
-			if !t.Completed {
-				pendingTasks++
-			}
-		}
-		marker := "  "
-		if l.ID == data.ActiveRoadmapID {
-			marker = "▶ "
-		}
-		if i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%s%s  (%dg/%ds/%dt %dp)\n",
-			marker, l.Name, len(mains), len(subs), len(tasks), pendingTasks)
-		fmt.Printf("    %s\n", l.ID)
-
-		if len(mains) == 0 {
-			fmt.Println("    (no goals)")
-			continue
-		}
-		for _, mg := range mains {
-			statusIcon := "⏸️"
-			switch mg.Status {
-			case StatusCompleted:
-				statusIcon = "✅"
-			case StatusInProgress:
-				statusIcon = "🔄"
-			}
-			fmt.Printf("    %s %s [%d%%]\n",
-				statusIcon, mg.Title, calculateProgress(mg.ID, data))
-			for _, sg := range subs {
-				if sg.ParentID == mg.ID {
-					icon := "○"
-					if sg.Status == StatusCompleted {
-						icon = "✓"
-					}
-					fmt.Printf("        %s %s\n", icon, sg.Title)
-				}
-			}
-		}
-	}
-
-	fmt.Printf("\nActive: %s\n", activeRoadmapName(data))
+	fmt.Printf("\n  %s %s\n\n", cCaption("Active:"), cBold(activeRoadmapName(data)))
 }
 
 func listShow(idOrName string) {

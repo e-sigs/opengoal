@@ -48,26 +48,35 @@ func calculateProgress(mainGoalID string, data GoalsData) int {
 func listGoals() {
 	data := readGoals()
 	if len(data.Roadmaps) == 0 {
-		fmt.Printf("\n%s\n", cTitle("📋 Current Goals"))
-		printSeparator()
-		fmt.Printf("\n  %s\n\n", cComment("No roadmaps yet. Create one with:  og list-create <name>"))
+		fmt.Println()
+		fmt.Println(boxTop(cTitle("📋 Goals")))
+		fmt.Println(boxLine(cComment("No roadmaps yet."), 0))
+		fmt.Println(boxLine(cComment("Create one: og list-create <name>"), 0))
+		fmt.Println(boxBottom())
+		fmt.Println()
 		return
 	}
 	listID := data.ActiveRoadmapID
 	mainGoals := goalsForRoadmap(data, listID)
 
-	fmt.Printf("\n%s  %s\n", cTitle("📋 Current Goals"), cCaption(fmt.Sprintf("[roadmap: %s]", activeRoadmapName(data))))
-	printSeparator()
+	fmt.Println()
+	fmt.Println(boxTop(cTitle("📋 Goals") + "  " + cCaption("· "+activeRoadmapName(data))))
+	fmt.Println(boxBottom())
 
 	if len(mainGoals) == 0 {
-		fmt.Printf("\n%s\n\n", cComment("No goals yet! Use /og-main to add your first goal."))
+		fmt.Println()
+		fmt.Println(boxLine(cComment("No goals yet — /og-main <title>"), 0))
+		fmt.Println(boxBottom())
+		fmt.Println()
 		return
 	}
+
+	subs := subGoalsForRoadmap(data, listID)
 
 	for _, mg := range mainGoals {
 		progress := calculateProgress(mg.ID, data)
 
-		statusIcon := "⏸️"
+		statusIcon := "⏸"
 		statusColor := cCaption
 		switch mg.Status {
 		case StatusCompleted:
@@ -78,14 +87,20 @@ func listGoals() {
 			statusColor = cInfo
 		}
 
-		fmt.Printf("\n%s %s\n", statusIcon, cBold(mg.Title))
-		fmt.Printf("   %s\n", cCaption(fmt.Sprintf("ID: %s | Progress: %d%% | Status: %s", mg.ID, progress, statusColor(mg.Status))))
+		// Card title: "<icon> <bold title>  [NN%]"
+		cardTitle := statusIcon + " " + cBold(mg.Title) + "  " + cCaption(fmt.Sprintf("[%d%%]", progress))
+		fmt.Println()
+		fmt.Println(boxTop(cardTitle))
+
+		// Meta line.
+		meta := cCaption("ID: ") + cDim(mg.ID) +
+			"  " + cCaption("·") + "  " + statusColor(string(mg.Status))
+		fmt.Println(boxLine(meta, 0))
 
 		if len(mg.Context) > 0 {
-			fmt.Printf("   %s %s\n", cCaption("Context:"), cDim(strings.Join(mg.Context, ", ")))
+			fmt.Println(boxLine(cCaption("Context: ")+cDim(strings.Join(mg.Context, ", ")), 0))
 		}
 
-		subs := subGoalsForRoadmap(data, listID)
 		var children []SubGoal
 		for _, sg := range subs {
 			if sg.ParentID == mg.ID {
@@ -94,7 +109,7 @@ func listGoals() {
 		}
 
 		if len(children) > 0 {
-			fmt.Printf("   %s\n", cBold("Sub-goals:"))
+			fmt.Println(boxBlank())
 			for _, sg := range children {
 				icon := cCaption("○")
 				title := cSubtitle(sg.Title)
@@ -102,13 +117,15 @@ func listGoals() {
 					icon = cSuccess("✓")
 					title = cDim(sg.Title)
 				}
-				fmt.Printf("     • %s %s %s\n", icon, title, cCaption(fmt.Sprintf("(%s)", sg.Status)))
+				line := "  " + icon + " " + title +
+					"  " + cCaption("("+string(sg.Status)+")")
+				fmt.Println(boxLine(line, 0))
 			}
 		}
+
+		fmt.Println(boxBottom())
 	}
 
-	fmt.Println()
-	printSeparator()
 	fmt.Println()
 }
 

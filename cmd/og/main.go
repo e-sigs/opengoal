@@ -290,13 +290,16 @@ Roadmaps:
 
 Inside OpenCode, prefer the slash commands:
   /today                            Dashboard
-  /og   /ogl   /ogc <name>          Roadmaps: browse, list, create
+  /og                               Show active roadmap
+  /ogl                              List all roadmaps + goals
+  /ogc <name>                       Create roadmap
   /ogs <name>   /ogd [name]         Roadmaps: switch, delete
   /og-main   /og-sub          Add main / sub-goals
   /og-list   /og-done         Roadmap goals, mark complete
   /og-summary   /og-remind    Daily summary, reminder
   /task-add   /task-list            Tasks: add, list
   /task-done   /task-delete         Tasks: complete, delete
+  /og-commands                      Condensed reference of all commands
 `)
 }
 

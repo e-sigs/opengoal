@@ -115,11 +115,13 @@ After install, these slash commands are available inside OpenCode:
 | Slash command | What it does |
 |---|---|
 | `/today` | Dashboard for the active roadmap |
-| `/og` | Interactive roadmap browser |
-| `/ogl`, `/ogc <name>`, `/ogs <name>`, `/ogd [name]` | List, create, switch, delete roadmaps |
+| `/og` | Show the active roadmap |
+| `/ogl` | List all roadmaps with their goals |
+| `/ogc <name>`, `/ogs <name>`, `/ogd [name]` | Create, switch, delete roadmaps |
 | `/og-main`, `/og-sub` | Add main / sub-goals |
 | `/og-list`, `/og-done`, `/og-summary`, `/og-remind` | Goal management |
 | `/task-add`, `/task-list`, `/task-done`, `/task-delete` | Task management |
+| `/og-commands` | Condensed reference of every CLI + slash command |
 
 ### Agents
 
