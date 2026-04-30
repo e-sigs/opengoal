@@ -11,6 +11,7 @@ A local-first goal & task tracker designed to coordinate **multiple AI agents** 
 - **Roadmaps** — independent named plans, each with their own goals/tasks
 - **Goals & sub-goals** — hierarchical, with progress rolled up
 - **Tasks** — priorities, dependencies (`--depends id1,id2`), claim/release for multi-agent coordination
+- **Bulk operations** — multi-ID + filter flags (`--all`, `--priority`, `--completed`) with confirm-by-default
 - **Atomic data** — flock-protected writes, append-only event log
 - **OpenCode integration** — `orchestrator` / `worker` / `reviewer` agents, plus `/today`, `/og*`, `/task-*` slash commands
 - **No daemon, no server** — single Go binary, JSON file under `~/.local/share/opencode/`
@@ -72,7 +73,7 @@ Goals:
   og list                              List goals in active roadmap
   og add-main <title>                  Add a main goal
   og add-sub <parent-id> <title>       Add a sub-goal
-  og done <id>                         Mark goal complete
+  og done <id...>                      Mark one or more goals complete
   og summary                           Daily summary
   og remind                            Reminder
 
@@ -80,8 +81,11 @@ Tasks:
   og task-list                         List tasks
   og task-add <title> [priority] [--depends id1,id2]
   og task-show <id>                    Show task with deps + claim
-  og task-done <id>                    Mark complete
-  og task-delete <id>                  Delete
+  og task-done <id...>                 Mark one or more complete
+  og task-delete <id...> [-y]          Delete one or more tasks
+  og task-delete --all [-y]            Delete every task
+  og task-delete --priority <h|m|l>    Delete every task at priority
+  og task-delete --completed           Delete every completed task
 
 Multi-agent:
   og task-next [--claim]               Next actionable task
@@ -99,7 +103,7 @@ Roadmaps:
   og list-create <name>                Create + switch
   og list-use <id|name>                Switch active roadmap
   og list-rename <id|name> <new>       Rename
-  og list-delete <id|name>             Delete + contents
+  og list-delete <id|name...>          Delete one or more roadmaps + contents
   og list-show <id|name>               Show full tree
 
 Dashboard:
