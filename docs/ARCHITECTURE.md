@@ -78,7 +78,7 @@ agent: general
 subtask: false
 ---
 
-!`og list-ls`
+!`og list-all`
 
 Do not add any commentary or repeat the output above.
 ```

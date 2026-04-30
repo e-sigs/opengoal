@@ -352,26 +352,3 @@ func sortTasksForDisplay(ts []Task) {
 		}
 	}
 }
-
-func clearCompletedTasks() {
-	withLock(func() {
-		data := readGoals()
-		completedCount := 0
-		kept := data.Tasks[:0]
-		for _, t := range data.Tasks {
-			if t.Completed {
-				completedCount++
-				continue
-			}
-			kept = append(kept, t)
-		}
-		// Make a copy so the underlying array is freed for GC.
-		data.Tasks = append([]Task{}, kept...)
-		writeGoals(data)
-		appendEvent(Event{
-			Event: EvTaskCleared,
-			Data:  map[string]any{"count": completedCount},
-		})
-		fmt.Printf("\n🗑️  Cleared %d completed task(s)\n\n", completedCount)
-	})
-}

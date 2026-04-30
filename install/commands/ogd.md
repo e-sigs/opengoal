@@ -8,7 +8,7 @@ argument-hint: [roadmap-name...]
 Arguments: `$ARGUMENTS`
 
 All roadmaps:
-!`og list-ls`
+!`og list-all`
 
 You are running `/ogd` — the opengoal roadmap deleter.
 

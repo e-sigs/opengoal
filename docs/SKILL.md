@@ -70,7 +70,6 @@ When all sub-goals are complete, the main goal is auto-completed.
 - `/task-list` — show tasks in the active roadmap
 - `/task-done <id>` — mark a task complete
 - `/task-delete <id>` — delete a task
-- `/task-clear` — remove all completed tasks
 
 ### Dashboard
 - `/today` — full dashboard for the active roadmap (goals + tasks + focus + stats)
@@ -87,8 +86,8 @@ og add-main <title>                # /og-main
 og add-sub <parent-id> <title>     # /og-sub
 og done <id>                       # /og-done
 og summary | remind | today
-og task-list | task-add | task-done | task-delete | task-clear
-og list-ls | list-create <name> | list-use <id|name>
+og task-list | task-add | task-done | task-delete
+og list-all | list-create <name> | list-use <id|name>
 og list-rename <id|name> <new-name> | list-delete <id|name> | list-show <id|name>
 ```
 

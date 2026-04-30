@@ -261,7 +261,6 @@ Tasks:
   task-delete --all [-y]            Delete every task in active roadmap
   task-delete --priority <h|m|l>    Delete every task at given priority
   task-delete --completed           Delete every completed task
-  task-clear                        Remove all completed tasks
 
 Multi-agent coordination:
   task-next [--claim]               Show next actionable task; --claim takes it
@@ -282,7 +281,7 @@ Dashboard:
   today                             Show today's dashboard
 
 Roadmaps:
-  list-ls                           Show all roadmaps
+  list-all                          Show all roadmaps with their goals (condensed)
   list-create <name>                Create a roadmap and switch to it
   list-use <id|name>                Switch active roadmap
   list-rename <id|name> <new-name>  Rename a roadmap
@@ -298,7 +297,6 @@ Inside OpenCode, prefer the slash commands:
   /og-summary   /og-remind    Daily summary, reminder
   /task-add   /task-list            Tasks: add, list
   /task-done   /task-delete         Tasks: complete, delete
-  /task-clear                       Remove all completed tasks
 `)
 }
 
@@ -398,9 +396,6 @@ func main() {
 		}
 		deleteTasksBulk(b)
 
-	case "task-clear":
-		clearCompletedTasks()
-
 	case "task-claim":
 		requireArg(args, "a task ID")
 		claimTask(args[0])
@@ -458,8 +453,8 @@ func main() {
 	case "today":
 		showToday()
 
-	case "list-ls":
-		listRoadmaps()
+	case "list-all":
+		listAll()
 
 	case "list-create":
 		requireArg(args, "a list name")

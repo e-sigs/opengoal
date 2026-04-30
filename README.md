@@ -82,7 +82,6 @@ Tasks:
   og task-show <id>                    Show task with deps + claim
   og task-done <id>                    Mark complete
   og task-delete <id>                  Delete
-  og task-clear                        Remove all completed
 
 Multi-agent:
   og task-next [--claim]               Next actionable task
@@ -96,7 +95,7 @@ Event log:
   og events [--follow] [--since 5m|RFC3339] [--filter substr]
 
 Roadmaps:
-  og list-ls                           Show all roadmaps
+  og list-all                          Show all roadmaps + their goals
   og list-create <name>                Create + switch
   og list-use <id|name>                Switch active roadmap
   og list-rename <id|name> <new>       Rename
@@ -120,7 +119,7 @@ After install, these slash commands are available inside OpenCode:
 | `/ogl`, `/ogc <name>`, `/ogs <name>`, `/ogd [name]` | List, create, switch, delete roadmaps |
 | `/og-main`, `/og-sub` | Add main / sub-goals |
 | `/og-list`, `/og-done`, `/og-summary`, `/og-remind` | Goal management |
-| `/task-add`, `/task-list`, `/task-done`, `/task-delete`, `/task-clear` | Task management |
+| `/task-add`, `/task-list`, `/task-done`, `/task-delete` | Task management |
 
 ### Agents
 

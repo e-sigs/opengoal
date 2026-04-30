@@ -41,7 +41,6 @@ A **lightning-fast goal tracking system** built in Go for OpenCode with persiste
     ├── task-list.md
     ├── task-done.md
     ├── task-delete.md
-    ├── task-clear.md
     └── today.md           # 🌟 Your dashboard
 
 ~/.local/share/opencode/
